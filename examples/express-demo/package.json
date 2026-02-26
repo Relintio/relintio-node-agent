@@ -1,0 +1,8 @@
+{
+  "name": "up-express-demo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

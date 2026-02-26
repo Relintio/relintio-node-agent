@@ -1,0 +1,29 @@
+{
+  "$schema": "https://www.schemastore.org/package.json",
+  "name": "@auraprotector/agent",
+  "version": "0.1.0",
+  "description": "UltimateProtector in-process agent for Node runtimes.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "express": ">=4"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src/",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/index.js",
+    "./express": "./src/express.js",
+    "./preload": {
+      "require": "./src/preload.cjs",
+      "import": "./src/preload.js"
+    }
+  }
+}
