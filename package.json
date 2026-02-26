@@ -2,9 +2,26 @@
   "$schema": "https://www.schemastore.org/package.json",
   "name": "@auraprotector/agent",
   "version": "0.1.0",
-  "description": "UltimateProtector in-process agent for Node runtimes.",
+  "description": "AuraProtector in-process agent for Node runtimes.",
   "type": "module",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/auraguard-co/AuraProtector.git",
+    "directory": "agents/node"
+  },
+  "homepage": "https://github.com/auraguard-co/AuraProtector#readme",
+  "bugs": {
+    "url": "https://github.com/auraguard-co/AuraProtector/issues"
+  },
+  "keywords": [
+    "auraprotector",
+    "security",
+    "waf",
+    "middleware",
+    "bot",
+    "express"
+  ],
   "engines": {
     "node": ">=18"
   },
