@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "@auraprotector/agent",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "AuraProtector in-process agent for Node runtimes.",
   "type": "module",
   "license": "UNLICENSED",
