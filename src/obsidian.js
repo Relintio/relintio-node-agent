@@ -1,5 +1,9 @@
 const SCRIPT_ID = 'aura-obsidian';
 
+// Invisible honeypot link — any client that follows this is a bot.
+// The href points to a trap path the main app can detect and auto-block.
+const HONEYPOT_HTML = '<a href="/.well-known/aura-trap" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none" tabindex="-1" aria-hidden="true">&nbsp;</a>';
+
 export function applyObsidianToResponse(req, res, rules) {
   if (!rules || typeof rules !== 'object') return;
 
@@ -11,9 +15,16 @@ export function applyObsidianToResponse(req, res, rules) {
 
   const mode = (rules.obsidian_mode === 'aggressive') ? 'aggressive' : 'compat';
   const scriptPayload = buildClientScript(rules, mode);
-  if (!scriptPayload) return;
 
-  const injection = `<script id="${SCRIPT_ID}">${scriptPayload}</script>`;
+  // Build combined injection: honeypot + obsidian script
+  let injection = '';
+  if (rules.obsidian_active) {
+    injection += HONEYPOT_HTML;
+  }
+  if (scriptPayload) {
+    injection += `<script id="${SCRIPT_ID}">${scriptPayload}</script>`;
+  }
+  if (!injection) return;
 
   const origSend = res.send?.bind(res);
   if (typeof origSend === 'function') {
@@ -30,6 +41,16 @@ export function applyObsidianToResponse(req, res, rules) {
       return origEnd(out, encoding, cb);
     };
   }
+}
+
+/**
+ * Check if the request hit the honeypot trap.
+ * Call this from the agent's handleExpress before normal enforcement.
+ * Returns true if the request should be blocked.
+ */
+export function isHoneypotTrap(req) {
+  const path = String(req.originalUrl || req.url || '/').split('?')[0] || '/';
+  return path === '/.well-known/aura-trap';
 }
 
 function tryInjectHtml(body, injection, res) {

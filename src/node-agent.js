@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { shouldProtectRequest, parseCookies, normalizeIp, detectCountry, isStaticRequest, isSensitiveRequest, cidrMatch, compilePhpLikeRegex } from './node-utils.js';
-import { applyObsidianToResponse } from './obsidian.js';
+import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
 // Update this when bumping agents/node/package.json.
@@ -33,6 +33,7 @@ export class UltimateProtectorNodeAgent {
     this.apiUrl = String(options.apiUrl).replace(/\/+$/, '');
     this.syncIntervalSeconds = Math.max(10, Number(options.syncIntervalSeconds ?? 60) || 60);
     this.allowSampleRate = Math.max(0, Math.min(1, Number(options.allowSampleRate ?? 0.01) || 0));
+    this.rateLimitPerMinute = Math.max(0, Number(options.rateLimitPerMinute ?? 120) || 0);
 
     this.onlyPaths = Array.isArray(options.onlyPaths) ? options.onlyPaths.map(String) : null;
     this.exceptPaths = Array.isArray(options.exceptPaths) ? options.exceptPaths.map(String) : null;
@@ -60,6 +61,11 @@ export class UltimateProtectorNodeAgent {
     // blocked IP set cache
     this.blockedIpSet = null;
     this.blockedIpSetVersion = null;
+
+    // Per-IP rate limiter (sliding window)
+    this.rateLimitWindow = 60_000; // 60 seconds
+    this.rateLimitBuckets = new Map(); // ip -> { count, resetAt }
+    this.rateLimitEvictAt = 0;
   }
 
   #cacheFilePath() {
@@ -480,6 +486,13 @@ export class UltimateProtectorNodeAgent {
       return next();
     }
 
+    // Honeypot trap — any client hitting this is a bot
+    if (isHoneypotTrap(req)) {
+      const ip = normalizeIp(req.ip || req.socket?.remoteAddress) || '0.0.0.0';
+      await this.#log('BLOCK', 'Honeypot Trap', 'honeypot', { ip, ua: String(req.headers['user-agent'] || ''), method: String(req.method || ''), host: String(req.headers.host || ''), path: pathOnly, country: detectCountry(req) });
+      return this.#respondBlock(res, this.rules || {}, ip, 'Honeypot Trap');
+    }
+
     // up_token exchange (challenge success)
     const upToken = reqUrl.searchParams.get('up_token');
     if (upToken) {
@@ -571,6 +584,28 @@ export class UltimateProtectorNodeAgent {
     if (this.blockedIpSet && this.blockedIpSet.has(ip)) {
       await this.#log('BLOCK', 'Global Blocklist', 'global_blocklist', ctx);
       return this.#respondBlock(res, rules, ip, 'Global Blocklist');
+    }
+
+    // L1.5 per-IP rate limiter
+    if (this.rateLimitPerMinute > 0) {
+      const now = Date.now();
+      const bucket = this.rateLimitBuckets.get(ip);
+      if (bucket && now < bucket.resetAt) {
+        bucket.count++;
+        if (bucket.count > this.rateLimitPerMinute) {
+          await this.#log('BLOCK', 'Rate Limit', 'rate_limit', ctx);
+          return this.#respondBlock(res, rules, ip, 'Rate Limit Exceeded');
+        }
+      } else {
+        this.rateLimitBuckets.set(ip, { count: 1, resetAt: now + this.rateLimitWindow });
+      }
+      // Evict stale entries every 5 minutes
+      if (now > this.rateLimitEvictAt) {
+        this.rateLimitEvictAt = now + 300_000;
+        for (const [k, v] of this.rateLimitBuckets) {
+          if (now >= v.resetAt) this.rateLimitBuckets.delete(k);
+        }
+      }
     }
 
     // L2 geo firewall
