@@ -1,26 +1,38 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "@auraprotector/agent",
-  "version": "0.2.0",
-  "description": "AuraProtector in-process agent for Node runtimes.",
+  "version": "0.2.1",
+  "description": "AuraProtector in-process agent for Node runtimes. Provides bot mitigation, threat detection, and adaptive content protection as Express middleware or zero-code preload.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": {
+    "name": "AuraGuardian",
+    "url": "https://auraguardian.com"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/auraguard-co/AuraProtector.git",
     "directory": "agents/node"
   },
-  "homepage": "https://github.com/auraguard-co/AuraProtector#readme",
+  "homepage": "https://auraguardian.com/docs",
   "bugs": {
-    "url": "https://github.com/auraguard-co/AuraProtector/issues"
+    "email": "support@auraguardian.com"
+  },
+  "funding": {
+    "type": "commercial",
+    "url": "https://auraguardian.com/pricing"
   },
   "keywords": [
     "auraprotector",
+    "auraguardian",
     "security",
     "waf",
     "middleware",
-    "bot",
-    "express"
+    "bot-detection",
+    "bot-mitigation",
+    "express",
+    "threat-protection",
+    "antibot"
   ],
   "engines": {
     "node": ">=18"
@@ -28,13 +40,20 @@
   "peerDependencies": {
     "express": ">=4"
   },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "sideEffects": false,
   "publishConfig": {
     "access": "public"
   },
   "files": [
     "src/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": "./src/index.js",

@@ -1,8 +1,18 @@
-# @auraprotector/agent (Node)
+# @auraprotector/agent
 
-In-process agent for Node runtimes.
+[![npm version](https://img.shields.io/npm/v/@auraprotector/agent)](https://www.npmjs.com/package/@auraprotector/agent)
+[![Node.js](https://img.shields.io/node/v/@auraprotector/agent)](https://nodejs.org)
+[![License](https://img.shields.io/badge/license-Proprietary-blue)](./LICENSE)
 
-## Express usage
+In-process bot-mitigation agent for Node.js runtimes. Connects to the AuraGuardian cloud to enforce real-time threat detection, IP reputation, and adaptive content protection rules.
+
+## Installation
+
+```bash
+npm install @auraprotector/agent
+```
+
+## Express Middleware
 
 ```js
 import express from 'express';
@@ -11,45 +21,48 @@ import { ultimateProtectorExpress } from '@auraprotector/agent/express';
 const app = express();
 
 app.use(ultimateProtectorExpress({
-  licenseKey: 'UP_LIVE_...',
-  apiUrl: 'https://YOUR_CLOUD/api',
+  licenseKey: process.env.UP_LICENSE_KEY,
+  apiUrl: process.env.UP_API_URL,
 }));
 
 app.get('/', (req, res) => res.send('ok'));
 app.listen(3000);
 ```
 
-## Zero-code usage (preload)
+## Zero-Code Preload
 
-If you don't want to modify app code, you can preload the agent and it will
-auto-wrap Node's HTTP server request listener (best-effort, fail-open).
+If you prefer not to modify application code, preload the agent via `NODE_OPTIONS`. The agent will auto-wrap Node's HTTP server request listener (fail-open on error).
 
 ```bash
 export UP_LICENSE_KEY='UP_LIVE_...'
-export UP_API_URL='https://YOUR_CLOUD/api'
+export UP_API_URL='https://app.auraguardian.com/api'
 export NODE_OPTIONS='--require @auraprotector/agent/preload'
 
 node server.js
 ```
 
-## Options
+## Configuration
 
-- `licenseKey` (required)
-- `apiUrl` (required) e.g. `https://cloud.example/api`
-- `syncIntervalSeconds` (default: `60`)
-- `allowSampleRate` (default: `0.01`) telemetry sampling for ALLOW
-- `onlyPaths`: string[] exact (`/checkout`) or prefix (`/product/*`)
-- `exceptPaths`: string[]
-- `onlyRegex`: string (JS regex source, e.g. `^/checkout`) or `/.../flags`
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `licenseKey` | `string` | — | **Required.** Your AuraGuardian license key. |
+| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://app.auraguardian.com/api` |
+| `syncIntervalSeconds` | `number` | `60` | How often to re-fetch rules from the cloud. |
+| `allowSampleRate` | `number` | `0.01` | Telemetry sampling rate for ALLOW decisions. |
+| `onlyPaths` | `string[]` | — | Exact (`/checkout`) or prefix (`/product/*`) path whitelist. |
+| `exceptPaths` | `string[]` | — | Paths to exclude from protection. |
+| `onlyRegex` | `string` | — | JS regex source, e.g. `^/checkout` or `/.../flags`. |
 
-## Changelog
+## Requirements
 
-### 0.2.0
+- Node.js ≥ 18
+- Express ≥ 4 (for middleware mode)
+- Active [AuraGuardian](https://auraguardian.com) license
 
-- **HMAC payload verification** — Rules payloads are now authenticated with HMAC-SHA256 before decryption. Requires platform ≥ 2026-04.
-- **`X-Agent-Version` header** — Sent on every `/verify` request for dashboard version tracking.
-- **`outdated` status handling** — If the cloud responds with `outdated`, the agent fails open and stops protecting until updated.
+## Security
 
-### 0.1.7
+If you discover a security vulnerability, please report it to **support@auraguardian.com**. Do not open a public issue.
 
-- Initial stable release with AES-256-CBC encrypted rules sync.
+## License
+
+Proprietary — see [LICENSE](./LICENSE) for details.
