@@ -1,26 +1,26 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "@auraprotector/agent",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "AuraProtector in-process agent for Node runtimes. Provides bot mitigation, threat detection, and adaptive content protection as Express middleware or zero-code preload.",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
   "author": {
     "name": "AuraGuardian",
-    "url": "https://auraguardian.com"
+    "url": "https://auraguardian.co"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/auraguard-co/AuraProtector.git",
     "directory": "agents/node"
   },
-  "homepage": "https://auraguardian.com/docs",
+  "homepage": "https://auraguardian.co/docs",
   "bugs": {
-    "email": "support@auraguardian.com"
+    "email": "support@auraguardian.co"
   },
   "funding": {
     "type": "commercial",
-    "url": "https://auraguardian.com/pricing"
+    "url": "https://auraguardian.co/pricing"
   },
   "keywords": [
     "auraprotector",

@@ -35,7 +35,7 @@ If you prefer not to modify application code, preload the agent via `NODE_OPTION
 
 ```bash
 export UP_LICENSE_KEY='UP_LIVE_...'
-export UP_API_URL='https://app.auraguardian.com/api'
+export UP_API_URL='https://app.auraguardian.co/api'
 export NODE_OPTIONS='--require @auraprotector/agent/preload'
 
 node server.js
@@ -46,7 +46,7 @@ node server.js
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `licenseKey` | `string` | — | **Required.** Your AuraGuardian license key. |
-| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://app.auraguardian.com/api` |
+| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://app.auraguardian.co/api` |
 | `syncIntervalSeconds` | `number` | `60` | How often to re-fetch rules from the cloud. |
 | `allowSampleRate` | `number` | `0.01` | Telemetry sampling rate for ALLOW decisions. |
 | `onlyPaths` | `string[]` | — | Exact (`/checkout`) or prefix (`/product/*`) path whitelist. |
@@ -57,11 +57,11 @@ node server.js
 
 - Node.js ≥ 18
 - Express ≥ 4 (for middleware mode)
-- Active [AuraGuardian](https://auraguardian.com) license
+- Active [AuraGuardian](https://auraguardian.co) license
 
 ## Security
 
-If you discover a security vulnerability, please report it to **support@auraguardian.com**. Do not open a public issue.
+If you discover a security vulnerability, please report it to **support@auraguardian.co**. Do not open a public issue.
 
 ## License
 

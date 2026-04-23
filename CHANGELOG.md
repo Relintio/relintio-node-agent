@@ -2,6 +2,11 @@
 
 All notable changes to `@auraprotector/agent` will be documented in this file.
 
+## [0.2.2] — 2026-04-23
+
+### Fixed
+- Corrected domain references from `auraguardian.com` to `auraguardian.co` globally.
+
 ## [0.2.1] — 2026-04-23
 
 ### Changed
