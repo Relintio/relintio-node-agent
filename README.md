@@ -41,3 +41,15 @@ node server.js
 - `onlyPaths`: string[] exact (`/checkout`) or prefix (`/product/*`)
 - `exceptPaths`: string[]
 - `onlyRegex`: string (JS regex source, e.g. `^/checkout`) or `/.../flags`
+
+## Changelog
+
+### 0.2.0
+
+- **HMAC payload verification** — Rules payloads are now authenticated with HMAC-SHA256 before decryption. Requires platform ≥ 2026-04.
+- **`X-Agent-Version` header** — Sent on every `/verify` request for dashboard version tracking.
+- **`outdated` status handling** — If the cloud responds with `outdated`, the agent fails open and stops protecting until updated.
+
+### 0.1.7
+
+- Initial stable release with AES-256-CBC encrypted rules sync.

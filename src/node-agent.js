@@ -107,12 +107,22 @@ export class UltimateProtectorNodeAgent {
 
   #aesDecryptBase64(base64Payload) {
     const buf = Buffer.from(String(base64Payload), 'base64');
-    if (buf.length < 17) return null;
-    const iv = buf.subarray(0, 16);
-    const ciphertext = buf.subarray(16);
-    const key = crypto.createHash('sha256').update(this.licenseKey).digest();
+    // Wire format: IV[16] + ciphertext[N] + HMAC-SHA256[32]
+    if (buf.length < 49) return null; // 16 IV + 1 min cipher + 32 HMAC
+    const mac = buf.subarray(buf.length - 32);
+    const body = buf.subarray(0, buf.length - 32);
+    const iv = body.subarray(0, 16);
+    const ciphertext = body.subarray(16);
+    const encKey = crypto.createHash('sha256').update(this.licenseKey).digest();
+    const macKey = crypto.createHash('sha256').update(this.licenseKey + ':hmac').digest();
+    const expectedMac = crypto.createHmac('sha256', macKey).update(body).digest();
     try {
-      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+      if (!crypto.timingSafeEqual(expectedMac, mac)) return null;
+    } catch {
+      return null;
+    }
+    try {
+      const decipher = crypto.createDecipheriv('aes-256-cbc', encKey, iv);
       const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
       const json = JSON.parse(plain);
       return json && typeof json === 'object' ? json : null;
@@ -127,7 +137,10 @@ export class UltimateProtectorNodeAgent {
     try {
       const res = await fetch(this.apiUrl + endpoint, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'X-Agent-Version': this.agentVersion,
+        },
         body: JSON.stringify(body),
         signal: ctrl.signal,
       });
@@ -175,6 +188,15 @@ export class UltimateProtectorNodeAgent {
       const now = Math.floor(Date.now() / 1000);
 
       if (res.json?.status === 'expired') {
+        this.status = 'expired';
+        this.rules = null;
+        this.syncedAt = now;
+        await this.#saveToDisk();
+        return;
+      }
+
+      // Outdated agent: fail-open, stop protecting.
+      if (res.json?.status === 'outdated') {
         this.status = 'expired';
         this.rules = null;
         this.syncedAt = now;
