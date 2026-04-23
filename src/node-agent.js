@@ -687,11 +687,8 @@ export class UltimateProtectorNodeAgent {
     const currentUrl = `${proto}://${host}${pathOnly}`;
     const baseUrl = this.apiUrl.replace(/\/?api$/i, '');
 
-    // Preferred flow: opaque token (prevents license_key leak in URLs/logs)
-    const fallback = `${baseUrl}/security-check?` + new URLSearchParams({
-      license_key: this.licenseKey,
-      return_url: currentUrl,
-    }).toString();
+    const rid = `RAY-${crypto.randomBytes(6).toString('hex')}`;
+    const ip = normalizeIp(req.ip || req.socket?.remoteAddress) || '0.0.0.0';
 
     this.#postJson('/challenge/init', {
       license_key: this.licenseKey,
@@ -703,9 +700,10 @@ export class UltimateProtectorNodeAgent {
           res.redirect(302, `${baseUrl}/security-check?token=${encodeURIComponent(token)}`);
           return;
         }
-        res.redirect(302, fallback);
+        // Fallback: block page instead of leaking license_key in URL
+        res.status(403).type('text/html').send(this.#blockHtml(ip, 'Verification Required', rid));
       })
-      .catch(() => res.redirect(302, fallback));
+      .catch(() => res.status(403).type('text/html').send(this.#blockHtml(ip, 'Verification Required', rid)));
   }
 
   #respondBlock(res, rules, ip, reason) {
