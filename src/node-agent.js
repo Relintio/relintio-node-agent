@@ -195,7 +195,7 @@ export class UltimateProtectorNodeAgent {
 
       let res;
       try {
-        res = await this.#postJson('/verify', payload, 5000);
+        res = await this.#postJson('/agent/verify', payload, 5000);
       } catch {
         // fail-open: keep current rules on transient network errors
         return;
@@ -474,7 +474,7 @@ export class UltimateProtectorNodeAgent {
       capabilities: this.capabilities,
     };
 
-    this.#postJson('/log', body, 2000).catch(() => {});
+    this.#postJson('/agent/log', body, 2000).catch(() => {});
   }
 
   #expiredHtml() {
@@ -768,7 +768,7 @@ export class UltimateProtectorNodeAgent {
     const rid = `RAY-${crypto.randomBytes(6).toString('hex')}`;
     const ip = normalizeIp(req.ip || req.socket?.remoteAddress) || '0.0.0.0';
 
-    this.#postJson('/challenge/init', {
+    this.#postJson('/agent/challenge/init', {
       license_key: this.licenseKey,
       return_url: currentUrl,
     }, 2000)
