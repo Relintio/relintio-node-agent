@@ -1,4 +1,5 @@
 import net from 'node:net';
+import crypto from 'node:crypto';
 
 export function parseCookies(cookieHeader) {
   const raw = String(cookieHeader || '');
@@ -221,4 +222,121 @@ function ipv6CidrMatch(ip, subnet, bits) {
   if (rem === 0) return true;
   const mask = 0xff << (8 - rem);
   return (a[bytes] & mask) === (b[bytes] & mask);
+}
+
+/**
+ * Extract a TLS fingerprint from a Node.js TLS socket.
+ * Approximates JA3 by hashing: TLS version + cipher suite.
+ * True JA3 requires raw ClientHello (not exposed by Node).
+ *
+ * @param {import('tls').TLSSocket|null} socket
+ * @returns {{hash:string, version:string, cipher:string, minTlsVersion:boolean}|null}
+ */
+export function extractTlsFingerprint(socket) {
+  if (!socket || typeof socket.getProtocol !== 'function') return null;
+  try {
+    const protocol = socket.getProtocol?.() || '';
+    const cipherInfo = socket.getCipher?.() || {};
+    const cipher = cipherInfo.name || '';
+    const version = cipherInfo.version || protocol || '';
+    if (!cipher && !version) return null;
+
+    const raw = `${protocol}|${cipher}|${version}`;
+    const hash = crypto.createHash('md5').update(raw).digest('hex');
+
+    // Flag if TLS version is below 1.2
+    const minTlsVersion = !protocol ||
+      protocol === 'TLSv1.3' ||
+      protocol === 'TLSv1.2';
+
+    return { hash, version: protocol, cipher, minTlsVersion };
+  } catch {
+    return null;
+  }
+}
+
+// Known-bad TLS fingerprint hashes (bots, scrapers, outdated clients)
+// These are MD5(protocol|cipher|version) for known automation tools.
+export const KNOWN_BAD_TLS_FINGERPRINTS = new Set([
+  // Placeholder entries — populated from threat intel.
+  // In production, these are synced from the server via rules.bad_tls_fingerprints
+]);
+
+/**
+ * In-memory geo lookup cache with TTL.
+ * Falls back to API call when no geo header is present.
+ */
+export class GeoLookupCache {
+  constructor({ apiUrl, licenseKey, ttlSeconds = 86400, maxEntries = 10000 }) {
+    this.apiUrl = String(apiUrl || '').replace(/\/+$/, '');
+    this.licenseKey = String(licenseKey || '');
+    this.ttlSeconds = ttlSeconds;
+    this.maxEntries = maxEntries;
+    this.cache = new Map(); // ip -> { country, ts }
+    this.pending = new Map(); // ip -> Promise
+  }
+
+  /**
+   * Resolve country for an IP. Returns cached value or fetches from API.
+   * @param {string} ip
+   * @returns {Promise<string>} ISO-3166 country code or 'XX'
+   */
+  async lookup(ip) {
+    ip = normalizeIp(ip);
+    if (!ip) return 'XX';
+
+    const now = Math.floor(Date.now() / 1000);
+    const hit = this.cache.get(ip);
+    if (hit && (now - hit.ts) < this.ttlSeconds) {
+      return hit.country;
+    }
+
+    // Deduplicate concurrent lookups for same IP
+    if (this.pending.has(ip)) {
+      return this.pending.get(ip);
+    }
+
+    const promise = this._fetch(ip).then((country) => {
+      this.cache.set(ip, { country, ts: now });
+      this.pending.delete(ip);
+      this._evict();
+      return country;
+    }).catch(() => {
+      this.pending.delete(ip);
+      return 'XX';
+    });
+
+    this.pending.set(ip, promise);
+    return promise;
+  }
+
+  async _fetch(ip) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    try {
+      const res = await fetch(this.apiUrl + '/agent/geo-lookup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ license_key: this.licenseKey, ip }),
+        signal: ctrl.signal,
+      });
+      const json = await res.json();
+      return (json && typeof json.country === 'string' && json.country.length === 2)
+        ? json.country.toUpperCase()
+        : 'XX';
+    } catch {
+      return 'XX';
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  _evict() {
+    if (this.cache.size <= this.maxEntries) return;
+    const entries = [...this.cache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    const drop = Math.ceil(this.maxEntries * 0.1);
+    for (let i = 0; i < drop && i < entries.length; i++) {
+      this.cache.delete(entries[i][0]);
+    }
+  }
 }

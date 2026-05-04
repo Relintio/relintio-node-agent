@@ -3,7 +3,7 @@ import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { shouldProtectRequest, parseCookies, normalizeIp, detectCountry, isStaticRequest, isSensitiveRequest, cidrMatch, compilePhpLikeRegex } from './node-utils.js';
+import { shouldProtectRequest, parseCookies, normalizeIp, detectCountry, isStaticRequest, isSensitiveRequest, cidrMatch, compilePhpLikeRegex, extractTlsFingerprint, KNOWN_BAD_TLS_FINGERPRINTS, GeoLookupCache } from './node-utils.js';
 import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
@@ -18,6 +18,7 @@ const INTEL_KEYS = [
   'cloudflare_cidrs',
   'bot_ua_regex',
   'banned_referrers',
+  'bad_tls_fingerprints',
 ];
 
 export class UltimateProtectorNodeAgent {
@@ -41,9 +42,10 @@ export class UltimateProtectorNodeAgent {
 
     this.agentKind = 'node';
     this.agentVersion = AGENT_VERSION;
-    this.capabilities = ['enforce:block', 'enforce:challenge', 'telemetry:v1', 'obsidian'];
+    this.capabilities = ['enforce:block', 'enforce:challenge', 'telemetry:v1', 'obsidian', 'tls-fingerprint', 'geo-fallback'];
 
     this.maxUaLength = 1024;
+    this.enforceTlsMinVersion = options.enforceTlsMinVersion !== false; // default true: block TLS < 1.2
 
     this.cachePath = this.#cacheFilePath();
 
@@ -66,6 +68,14 @@ export class UltimateProtectorNodeAgent {
     this.rateLimitWindow = 60_000; // 60 seconds
     this.rateLimitBuckets = new Map(); // ip -> { count, resetAt }
     this.rateLimitEvictAt = 0;
+
+    // CIDR-based geo fallback lookup
+    this.geoCache = new GeoLookupCache({
+      apiUrl: this.apiUrl,
+      licenseKey: this.licenseKey,
+      ttlSeconds: 86400,
+      maxEntries: 10000,
+    });
   }
 
   #cacheFilePath() {
@@ -455,6 +465,8 @@ export class UltimateProtectorNodeAgent {
       method: ctx.method,
       host: ctx.host,
       path: ctx.path,
+      tls_hash: ctx.tls_hash ?? undefined,
+      tls_version: ctx.tls_version ?? undefined,
 
       protocol_version: 1,
       agent_kind: this.agentKind,
@@ -555,12 +567,22 @@ export class UltimateProtectorNodeAgent {
     const ua = uaRaw.length > this.maxUaLength ? uaRaw.slice(0, this.maxUaLength) : uaRaw;
     const method = String(req.method || '');
     const host = String(req.headers.host || '');
-    const country = detectCountry(req);
     const ref = String(req.headers.referer || '');
     const origin = String(req.headers.origin || '');
 
     const remote = normalizeIp(req.socket?.remoteAddress);
     const ip = this.#detectClientIp(req, rules, remote);
+
+    // Geo detection with CIDR-based API fallback
+    let country = detectCountry(req);
+    if (country === 'XX' && Array.isArray(rules.block_geo) && rules.block_geo.length) {
+      // Only do the API lookup when geo rules are active and headers failed
+      try {
+        country = await this.geoCache.lookup(ip);
+      } catch {
+        // fail-open: keep XX
+      }
+    }
 
     const ctx = { ip, ua, method, host, path: pathOnly, country };
 
@@ -605,6 +627,27 @@ export class UltimateProtectorNodeAgent {
         for (const [k, v] of this.rateLimitBuckets) {
           if (now >= v.resetAt) this.rateLimitBuckets.delete(k);
         }
+      }
+    }
+
+    // L1.6 TLS/JA3 Fingerprint
+    const tlsFp = extractTlsFingerprint(req.socket);
+    if (tlsFp) {
+      ctx.tls_hash = tlsFp.hash;
+      ctx.tls_version = tlsFp.version;
+      ctx.tls_cipher = tlsFp.cipher;
+
+      // Block deprecated TLS versions (< 1.2) when enforcement enabled
+      if (this.enforceTlsMinVersion && !tlsFp.minTlsVersion) {
+        await this.#log('BLOCK', 'Deprecated TLS', 'tls_version', ctx);
+        return this.#respondBlock(res, rules, ip, 'Insecure TLS Version');
+      }
+
+      // Check against known-bad fingerprint hashes (server-synced + local)
+      const serverBadFps = Array.isArray(rules.bad_tls_fingerprints) ? rules.bad_tls_fingerprints : [];
+      if (KNOWN_BAD_TLS_FINGERPRINTS.has(tlsFp.hash) || serverBadFps.includes(tlsFp.hash)) {
+        await this.#log('BLOCK', 'Bad TLS Fingerprint', 'tls_fingerprint', ctx);
+        return this.#respondBlock(res, rules, ip, 'Suspicious TLS Fingerprint');
       }
     }
 
