@@ -8,7 +8,7 @@ import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
 // Update this when bumping agents/node/package.json.
-const AGENT_VERSION = '0.4.0';
+const AGENT_VERSION = '0.5.0';
 
 const INTEL_KEYS = [
   'banned_isps',
@@ -597,6 +597,21 @@ export class UltimateProtectorNodeAgent {
       const ok = await this.#isSafeSeoCrawler(ua, ip);
       if (ok) {
         await this.#log('ALLOW', 'SEO Safety', null, ctx);
+        return next();
+      }
+    } else {
+      // SEO safety OFF: block UAs impersonating known crawlers that fail rDNS
+      const crawlerTokens = ['googlebot','bingbot','yandex','baiduspider','duckduckbot','slurp','applebot'];
+      const uaLower = ua.toLowerCase();
+      const matchedBot = crawlerTokens.find(t => uaLower.includes(t));
+      if (matchedBot) {
+        const verified = await this.#isSafeSeoCrawler(ua, ip);
+        if (!verified) {
+          await this.#log('BLOCK', `Fake Crawler: ${matchedBot}`, 'fake_crawler', ctx);
+          return this.#respondBlock(res, rules, ip, 'Fake Crawler Detected');
+        }
+        // Real crawler verified via rDNS — allow through
+        await this.#log('ALLOW', 'Verified Crawler', null, ctx);
         return next();
       }
     }
