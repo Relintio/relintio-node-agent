@@ -2,6 +2,12 @@
 
 All notable changes to `@auraprotector/agent` will be documented in this file.
 
+## [0.3.0] — 2026-05-04
+
+### Changed
+- **Geo enrichment architecture hardened** — The server-side `/api/agent/geo-lookup` endpoint now performs local MaxMind GeoLite2 lookups instead of proxying to `ipinfo.io`. Agent behaviour is unchanged; the improvement is server-side.
+- Bumped `AGENT_VERSION` to `0.3.0`.
+
 ## [0.2.2] — 2026-04-23
 
 ### Fixed
