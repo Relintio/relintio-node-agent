@@ -52,6 +52,14 @@ node server.js
 | `onlyPaths` | `string[]` | — | Exact (`/checkout`) or prefix (`/product/*`) path whitelist. |
 | `exceptPaths` | `string[]` | — | Paths to exclude from protection. |
 | `onlyRegex` | `string` | — | JS regex source, e.g. `^/checkout` or `/.../flags`. |
+| `rateLimitPerMinute` | `number` | `120` | Per-IP request cap. `0` disables. |
+| `enforceTlsMinVersion` | `boolean` | `true` | Block connections below TLS 1.2. |
+
+## Geo Enrichment
+
+When CDN geo headers (`CF-IPCountry`, etc.) are absent, the agent calls the platform's `/api/agent/geo-lookup` endpoint.
+The server resolves the country using **local MaxMind GeoLite2 databases** — zero external API calls, zero cost, microsecond latency.
+Results are cached in-memory (24h TTL) to minimize round-trips.
 
 ## Requirements
 
