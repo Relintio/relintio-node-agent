@@ -8,7 +8,7 @@ import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
 // Update this when bumping agents/node/package.json.
-const AGENT_VERSION = '0.3.0';
+const AGENT_VERSION = '0.4.0';
 
 const INTEL_KEYS = [
   'banned_isps',

@@ -2,6 +2,14 @@
 
 All notable changes to `@auraprotector/agent` will be documented in this file.
 
+## [0.4.0] — 2026-05-04
+
+### Fixed
+- **API endpoint alignment** — All agent HTTP calls now use the canonical `/agent/` prefixed routes (`/agent/verify`, `/agent/log`, `/agent/challenge/init`). Fixes silent connection failures when the server only exposes prefixed routes.
+
+### Changed
+- Bumped `AGENT_VERSION` to `0.4.0`.
+
 ## [0.3.0] — 2026-05-04
 
 ### Changed
