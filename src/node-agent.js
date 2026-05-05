@@ -573,10 +573,9 @@ export class UltimateProtectorNodeAgent {
     const remote = normalizeIp(req.socket?.remoteAddress);
     const ip = this.#detectClientIp(req, rules, remote);
 
-    // Geo detection with CIDR-based API fallback
+    // Geo detection — always resolve via API when CDN headers are absent
     let country = detectCountry(req);
-    if (country === 'XX' && Array.isArray(rules.block_geo) && rules.block_geo.length) {
-      // Only do the API lookup when geo rules are active and headers failed
+    if (country === 'XX') {
       try {
         country = await this.geoCache.lookup(ip);
       } catch {
