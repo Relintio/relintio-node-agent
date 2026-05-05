@@ -8,7 +8,7 @@ import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
 // Update this when bumping agents/node/package.json.
-const AGENT_VERSION = '0.7.0';
+const AGENT_VERSION = '0.8.0';
 
 const INTEL_KEYS = [
   'banned_isps',
@@ -505,7 +505,8 @@ export class UltimateProtectorNodeAgent {
   }
 
   #blockHtml(ip, reason, rid) {
-    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Access Denied</title><style>body{background:#050507;color:#d4d4d8;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;margin:0}.container{max-width:600px;padding:40px;text-align:center}h1{font-size:32px;font-weight:700;color:#fff;margin:0 0 10px}p{font-size:16px;line-height:1.5;color:#a1a1aa;margin-bottom:30px}.details{background:#0f0f11;border:1px solid #27272a;border-radius:8px;padding:15px;text-align:left;font-family:monospace;font-size:12px;color:#71717a;width:100%;box-sizing:border-box}.row{display:flex;justify-content:space-between;margin-bottom:5px}</style></head><body><div class="container"><h1>Access Denied</h1><p>The owner of this website has banned your IP address (${ip}) based on global security policies.</p><div class="details"><div class="row"><span>Ray ID:</span><span>${rid}</span></div><div class="row"><span>Your IP:</span><span>${ip}</span></div><div class="row"><span>Reason:</span><span>${reason}</span></div></div></div></body></html>`;
+    const time = new Date().toISOString();
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Access Denied \u2014 AuraGuardian</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#08080c;color:#d4d4d8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}.bg{position:fixed;inset:0;z-index:0}.bg::before{content:"";position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 30% 20%,rgba(99,102,241,.08) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(244,63,94,.06) 0%,transparent 60%);animation:drift 20s ease-in-out infinite alternate}@keyframes drift{0%{transform:translate(0,0) rotate(0deg)}100%{transform:translate(30px,-20px) rotate(2deg)}}.card{position:relative;z-index:1;max-width:520px;width:90%;background:rgba(15,15,20,.85);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:48px 40px;text-align:center;backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);box-shadow:0 25px 50px -12px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05)}.shield{width:64px;height:64px;margin:0 auto 24px;position:relative}.shield svg{width:100%;height:100%;filter:drop-shadow(0 0 20px rgba(99,102,241,.3))}.shield::after{content:"";position:absolute;inset:-4px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0%,rgba(99,102,241,.4) 25%,transparent 50%,rgba(244,63,94,.4) 75%,transparent 100%);animation:spin 3s linear infinite;mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px));-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px))}@keyframes spin{to{transform:rotate(360deg)}}h1{font-size:24px;font-weight:700;color:#fff;margin-bottom:8px;letter-spacing:-.02em}.subtitle{font-size:15px;color:#71717a;line-height:1.5;margin-bottom:32px}.meta{background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px 20px;text-align:left;font-family:"SF Mono","Cascadia Code","Fira Code",monospace;font-size:12px;color:#52525b}.meta .row{display:flex;justify-content:space-between;padding:4px 0}.meta .row+.row{border-top:1px solid rgba(255,255,255,.04)}.meta .label{color:#71717a}.meta .value{color:#a1a1aa;text-align:right;max-width:60%;word-break:break-all}.footer{margin-top:32px;font-size:11px;color:#3f3f46}.footer a{color:#6366f1;text-decoration:none;font-weight:500}.footer a:hover{text-decoration:underline}@media(max-width:480px){.card{padding:32px 24px}h1{font-size:20px}}</style></head><body><div class="bg"></div><div class="card"><div class="shield"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="url(#g)" opacity=".15"/><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" stroke="url(#g)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="g" x1="3" y1="2" x2="21" y2="24" gradientUnits="userSpaceOnUse"><stop stop-color="#818cf8"/><stop offset="1" stop-color="#f43f5e"/></linearGradient></defs></svg></div><h1>Access Denied</h1><p class="subtitle">This request has been blocked by the site&#39;s security system.</p><div class="meta"><div class="row"><span class="label">Ray ID</span><span class="value">${rid}</span></div><div class="row"><span class="label">Your IP</span><span class="value">${ip}</span></div><div class="row"><span class="label">Reason</span><span class="value">${reason}</span></div><div class="row"><span class="label">Time</span><span class="value">${time}</span></div></div><p class="footer">Protected by <a href="https://auraguardian.co" target="_blank" rel="noopener">AuraGuardian</a></p></div></body></html>`;
   }
 
   async handleExpress(req, res, next) {
@@ -626,19 +627,21 @@ export class UltimateProtectorNodeAgent {
         return next();
       }
     } else {
-      // SEO safety OFF: block UAs impersonating known crawlers that fail rDNS
-      const crawlerTokens = ['googlebot','bingbot','yandex','baiduspider','duckduckbot','slurp','applebot'];
+      // SEO safety OFF: ALL bots are denied.
+      // Verified real crawlers → soft block (no ban). Fakes → hard block (ban).
+      const crawlerTokens = ['googlebot','bingbot','yandex','baiduspider','duckduckbot','slurp','applebot','facebookexternalhit','twitterbot','linkedinbot','pinterestbot'];
       const uaLower = ua.toLowerCase();
       const matchedBot = crawlerTokens.find(t => uaLower.includes(t));
       if (matchedBot) {
         const verified = await this.#isSafeSeoCrawler(ua, ip);
-        if (!verified) {
-          await this.#log('BLOCK', `Fake Crawler: ${matchedBot}`, 'fake_crawler', ctx);
-          return this.#respondBlock(res, rules, ip, 'Fake Crawler Detected');
+        if (verified) {
+          // Real crawler — soft block (no ban, just 403)
+          await this.#log('BLOCK', `SEO Disabled \u2014 Verified Crawler: ${matchedBot}`, 'seo_disabled_crawler', ctx);
+          return this.#respondSoftBlock(res, rules, ip, 'SEO Disabled');
         }
-        // Real crawler verified via rDNS — allow through
-        await this.#log('ALLOW', 'Verified Crawler', null, ctx);
-        return next();
+        // Fake crawler — hard block + ban
+        await this.#log('BLOCK', `Fake Crawler: ${matchedBot}`, 'fake_crawler', ctx);
+        return this.#respondBlock(res, rules, ip, 'Fake Crawler Detected');
       }
     }
 
@@ -673,13 +676,14 @@ export class UltimateProtectorNodeAgent {
       }
     }
 
-    // L2 geo firewall
+    // L2 geo firewall (soft-block: IP is NOT auto-banned)
+    // Real humans can retry with VPN or request whitelist.
     if (Array.isArray(rules.block_geo) && rules.block_geo.length) {
       const isWhitelist = (rules.geo_mode || 'blacklist') === 'whitelist';
       const inList = rules.block_geo.includes(country);
       if ((isWhitelist && !inList) || (!isWhitelist && inList)) {
-        await this.#log('BLOCK', 'Geo Firewall', 'geo', ctx);
-        return this.#respondBlock(res, rules, ip, 'Geo Firewall');
+        await this.#log('BLOCK', 'Geo Firewall', 'geo_soft', ctx);
+        return this.#respondSoftBlock(res, rules, ip, 'Geo Firewall');
       }
     }
 
@@ -914,6 +918,20 @@ export class UltimateProtectorNodeAgent {
   }
 
   #respondBlock(res, rules, ip, reason) {
+    if (rules.cloak_html) {
+      res.status(200).type('text/html').send(String(rules.cloak_html));
+      return;
+    }
+
+    const rid = `RAY-${crypto.randomBytes(6).toString('hex')}`;
+    res.status(403).type('text/html').send(this.#blockHtml(ip, reason, rid));
+  }
+
+  /**
+   * Soft block — same visual as #respondBlock but uses a non-escalating reason code.
+   * The platform's ban pipeline ignores 'geo_soft' and 'seo_disabled_crawler' codes.
+   */
+  #respondSoftBlock(res, rules, ip, reason) {
     if (rules.cloak_html) {
       res.status(200).type('text/html').send(String(rules.cloak_html));
       return;
