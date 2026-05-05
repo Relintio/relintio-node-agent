@@ -89,6 +89,10 @@ export class UltimateProtectorNodeAgent {
       ttlSeconds: 86400,
       maxEntries: 10000,
     });
+
+    // Heartbeat: fire-and-forget ping every 5 minutes (non-blocking, no await)
+    this._heartbeatIntervalMs = 300_000; // 5 minutes
+    this._lastHeartbeatAt = 0;
   }
 
   #cacheFilePath() {
@@ -469,6 +473,25 @@ export class UltimateProtectorNodeAgent {
     this.blockedIpSetVersion = ver;
   }
 
+  /**
+   * Non-blocking heartbeat ping (fire-and-forget, no await).
+   * Throttled to once every 5 minutes via in-memory timestamp.
+   * Network failures are silently swallowed via .catch().
+   */
+  #sendHeartbeat(domain) {
+    const now = Date.now();
+    if ((now - this._lastHeartbeatAt) < this._heartbeatIntervalMs) return;
+    this._lastHeartbeatAt = now;
+
+    // Fire-and-forget — do NOT use await, attach .catch() for silent failure.
+    this.#postJson('/agent/heartbeat', {
+      license_key: this.licenseKey,
+      domain: domain ?? 'unknown',
+      agent_version: this.agentVersion,
+      timestamp: Math.floor(now / 1000),
+    }, 2000).catch(() => {});
+  }
+
   async #log(action, reason, reasonCode, ctx) {
     if (!ctx || !ctx.ip) return;
     if (action === 'ALLOW' && this.allowSampleRate > 0) {
@@ -512,6 +535,9 @@ export class UltimateProtectorNodeAgent {
   async handleExpress(req, res, next) {
     const reqUrl = new URL(req.originalUrl || req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathOnly = reqUrl.pathname || '/';
+
+    // Non-blocking heartbeat (throttled internally, no await)
+    this.#sendHeartbeat(String(req.hostname || req.headers.host || 'unknown'));
 
     if (!shouldProtectRequest({
       path: pathOnly,
