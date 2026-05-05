@@ -75,6 +75,9 @@ export class UltimateProtectorNodeAgent {
     this.blockedIpSet = null;
     this.blockedIpSetVersion = null;
 
+    // Server-side cache invalidation version
+    this.rulesVersion = 0;
+
     // Per-IP token-bucket rate limiter (replaces fixed-window)
     this.rlBuckets = new Map(); // ip -> { ts, tokens }
     this.rlEvictAt = 0;
@@ -237,7 +240,15 @@ export class UltimateProtectorNodeAgent {
             const merged = { ...decoded };
 
             // merge unchanged intel lists
-            if (this.rules && typeof this.rules === 'object') {
+            // Detect remote cache purge: if server's rules_version changed,
+            // discard stale intel instead of merging — forces full re-download.
+            const serverRulesVer = Number(res.json.rules_version ?? merged.rules_version ?? 0) || 0;
+            if (serverRulesVer > this.rulesVersion && this.rulesVersion > 0) {
+              // Server bumped rules_version → this is a purge signal.
+              // Accept the new payload as-is without merging old intel lists.
+              this.blockedIpSet = null;
+              this.blockedIpSetVersion = null;
+            } else if (this.rules && typeof this.rules === 'object') {
               for (const k of INTEL_KEYS) {
                 if (Object.prototype.hasOwnProperty.call(merged, k) && merged[k] === null) {
                   merged[k] = this.rules[k];
@@ -248,6 +259,7 @@ export class UltimateProtectorNodeAgent {
               }
             }
 
+            this.rulesVersion = serverRulesVer;
             this.status = 'success';
             this.rules = merged;
             this.syncedAt = now;
