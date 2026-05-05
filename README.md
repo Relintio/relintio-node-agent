@@ -4,7 +4,7 @@
 [![Node.js](https://img.shields.io/node/v/@auraprotector/agent)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-Proprietary-blue)](./LICENSE)
 
-In-process bot-mitigation agent for Node.js runtimes. Connects to the AuraGuardian cloud to enforce real-time threat detection, IP reputation, and adaptive content protection rules.
+In-process bot-mitigation agent for Node.js runtimes. Connects to the AuraGuardian cloud to enforce real-time threat detection, IP reputation, adaptive content protection, and **additive risk scoring** with graduated response.
 
 ## Installation
 
@@ -40,6 +40,34 @@ export NODE_OPTIONS='--require @auraprotector/agent/preload'
 
 node server.js
 ```
+
+## Risk Scoring Engine (v0.6.0+)
+
+Every request is evaluated using an **additive 0-100 signal-based score**. Signals include:
+
+| Signal | Weight | Description |
+|---|---|---|
+| Empty User-Agent | +50 | No UA header sent |
+| Short User-Agent | +25 | UA < 20 characters |
+| No Accept-Language | +20 | Missing browser locale header |
+| Generic Accept | +15 | Wildcard `*/*` only |
+| Connection: close | +10 | Non-persistent connection |
+| POST without Referer | +15 | Form submission without origin |
+| Rate burst | +35 | Token-bucket exhaustion |
+
+### Response Tiers
+
+| Tier | Score Range | Behavior |
+|---|---|---|
+| **ALLOW** | 0–39 | Request proceeds normally |
+| **SLOW** | 40–59 | 2-second delay to exhaust scanners |
+| **CHALLENGE** | 60–74 | Browser verification challenge |
+| **DECOY** | 75–84 | Serves fake maintenance page |
+| **BLOCK** | 85–100 | Hard block with configured response |
+
+### Token-Bucket Rate Limiter
+
+Replaces the legacy fixed-window counter. Default: **8 tokens/sec**, burst capacity of **24**. Route-aware multipliers give extra capacity to static assets and reduce capacity for sensitive endpoints.
 
 ## Configuration
 

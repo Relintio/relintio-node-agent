@@ -2,6 +2,19 @@
 
 All notable changes to `@auraprotector/agent` will be documented in this file.
 
+## [0.6.0] — 2026-05-05
+
+### Added
+- **Additive risk-scoring engine** — 0-100 signal-based scoring with 7 weighted signals (UA quality, Accept-Language, Accept header, Connection type, POST-Referer, rate burst).
+- **5-tier graduated response** — ALLOW (0-39), SLOW (40-59), CHALLENGE (60-74), DECOY (75-84), BLOCK (85+).
+- **Token-bucket rate limiter** — Replaces fixed-window counter. 8 tokens/sec, 24 burst, route-aware multipliers. Memory-safe with 5-minute eviction.
+- **`#respondSlow()`** — 2-second delay response to exhaust automated scanners.
+- **`#respondDecoy()`** — Serves configurable maintenance-style HTML decoy page.
+- **`risk_score` telemetry** — Agent-calculated score forwarded to server in log payload.
+
+### Changed
+- Bumped `AGENT_VERSION` to `0.6.0`.
+
 ## [0.4.0] — 2026-05-04
 
 ### Fixed
