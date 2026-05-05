@@ -8,7 +8,7 @@ import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
 // Update this when bumping agents/node/package.json.
-const AGENT_VERSION = '0.5.0';
+const AGENT_VERSION = '0.6.0';
 
 const INTEL_KEYS = [
   'banned_isps',
@@ -20,6 +20,17 @@ const INTEL_KEYS = [
   'banned_referrers',
   'bad_tls_fingerprints',
 ];
+
+// --- Additive scoring thresholds (ported from OG engine) ---
+const THRESHOLDS = { ALLOW: 0, SLOW: 40, CHALLENGE: 60, DECOY: 75, BLOCK: 85 };
+const RL_RATE_PER_SEC = 8;
+const RL_BURST = 24;
+const RL_ROUTE_MULTIPLIERS = [
+  [/^\/login/i, 0.4], [/^\/auth/i, 0.4], [/^\/api\//i, 0.7],
+  [/^\/assets\//i, 2.0], [/^\/wp-login/i, 0.4], [/^\/wp-admin/i, 0.5],
+];
+
+const DECOY_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scheduled Maintenance</title><style>body{background:#0a0a0a;color:#aaa;font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}.box{text-align:center;max-width:480px}h1{font-size:1.5rem;color:#fff;margin:0 0 1rem}p{color:#666;font-size:.875rem}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are currently performing scheduled maintenance. Please try again later.</p><p style="color:#444;font-size:.75rem;margin-top:2rem">ETA: ~15 minutes</p></div></body></html>';
 
 export class UltimateProtectorNodeAgent {
   /**
@@ -64,10 +75,9 @@ export class UltimateProtectorNodeAgent {
     this.blockedIpSet = null;
     this.blockedIpSetVersion = null;
 
-    // Per-IP rate limiter (sliding window)
-    this.rateLimitWindow = 60_000; // 60 seconds
-    this.rateLimitBuckets = new Map(); // ip -> { count, resetAt }
-    this.rateLimitEvictAt = 0;
+    // Per-IP token-bucket rate limiter (replaces fixed-window)
+    this.rlBuckets = new Map(); // ip -> { ts, tokens }
+    this.rlEvictAt = 0;
 
     // CIDR-based geo fallback lookup
     this.geoCache = new GeoLookupCache({
@@ -465,6 +475,7 @@ export class UltimateProtectorNodeAgent {
       method: ctx.method,
       host: ctx.host,
       path: ctx.path,
+      risk_score: ctx.risk_score ?? undefined,
       tls_hash: ctx.tls_hash ?? undefined,
       tls_version: ctx.tls_version ?? undefined,
 
@@ -622,27 +633,8 @@ export class UltimateProtectorNodeAgent {
       return this.#respondBlock(res, rules, ip, 'Global Blocklist');
     }
 
-    // L1.5 per-IP rate limiter
-    if (this.rateLimitPerMinute > 0) {
-      const now = Date.now();
-      const bucket = this.rateLimitBuckets.get(ip);
-      if (bucket && now < bucket.resetAt) {
-        bucket.count++;
-        if (bucket.count > this.rateLimitPerMinute) {
-          await this.#log('BLOCK', 'Rate Limit', 'rate_limit', ctx);
-          return this.#respondBlock(res, rules, ip, 'Rate Limit Exceeded');
-        }
-      } else {
-        this.rateLimitBuckets.set(ip, { count: 1, resetAt: now + this.rateLimitWindow });
-      }
-      // Evict stale entries every 5 minutes
-      if (now > this.rateLimitEvictAt) {
-        this.rateLimitEvictAt = now + 300_000;
-        for (const [k, v] of this.rateLimitBuckets) {
-          if (now >= v.resetAt) this.rateLimitBuckets.delete(k);
-        }
-      }
-    }
+    // L1.5 per-IP rate limiter (token-bucket — scoring handles the decision)
+    // (Token-bucket consumed inside #scoreRequest below)
 
     // L1.6 TLS/JA3 Fingerprint
     const tlsFp = extractTlsFingerprint(req.socket);
@@ -768,8 +760,115 @@ export class UltimateProtectorNodeAgent {
       }
     }
 
+    // --- Deep Scan: Additive Scoring Engine ---
+    const pathOnly = String(req.path || req.url || '/').split('?')[0];
+    const [riskScore, scoreReasons] = this.#scoreRequest(req, ip, ua, pathOnly);
+    ctx.risk_score = riskScore;
+
+    if (riskScore >= THRESHOLDS.BLOCK) {
+      await this.#log('BLOCK', `High Risk Score (${riskScore}): ${scoreReasons.join(', ')}`, 'high_risk_score', ctx);
+      return this.#respondBlock(res, rules, ip, 'Risk Assessment');
+    }
+    if (riskScore >= THRESHOLDS.DECOY) {
+      await this.#log('DECOY', `Decoy Score (${riskScore}): ${scoreReasons.join(', ')}`, 'decoy', ctx);
+      return this.#respondDecoy(res, rules);
+    }
+    if (riskScore >= THRESHOLDS.CHALLENGE) {
+      await this.#log('CHALLENGE', `Challenge Score (${riskScore}): ${scoreReasons.join(', ')}`, 'challenge_score', ctx);
+      return this.#respondChallenge(req, res);
+    }
+    if (riskScore >= THRESHOLDS.SLOW) {
+      await this.#log('SLOW', `Slow Score (${riskScore}): ${scoreReasons.join(', ')}`, 'slow', ctx);
+      await this.#respondSlow();
+      // continues to allow after delay
+    }
+
     await this.#log('ALLOW', 'Clean Traffic', null, ctx);
     return next();
+  }
+
+  // =======================================================
+  // Additive scoring engine (ported from OG UltimateProtector)
+  // =======================================================
+
+  #routeMultiplier(path) {
+    for (const [rx, m] of RL_ROUTE_MULTIPLIERS) {
+      if (rx.test(path)) return m;
+    }
+    return 1.0;
+  }
+
+  #consumeToken(ip, mult) {
+    const now = Date.now() / 1000;
+    let bucket = this.rlBuckets.get(ip);
+    if (!bucket) {
+      bucket = { ts: now, tokens: RL_BURST };
+      this.rlBuckets.set(ip, bucket);
+    }
+
+    const elapsed = now - bucket.ts;
+    const added = elapsed * RL_RATE_PER_SEC * mult;
+    bucket.tokens = Math.min(RL_BURST * mult, bucket.tokens + added);
+    bucket.ts = now;
+
+    let exceeded = false;
+    if (bucket.tokens >= 1) {
+      bucket.tokens--;
+    } else {
+      exceeded = true;
+    }
+
+    // Evict stale entries every 5 minutes
+    if (now > this.rlEvictAt) {
+      this.rlEvictAt = now + 300;
+      for (const [k, v] of this.rlBuckets) {
+        if (now - v.ts > 120) this.rlBuckets.delete(k);
+      }
+    }
+
+    return { exceeded };
+  }
+
+  #scoreRequest(req, ip, ua, pathOnly) {
+    let score = 0;
+    const reasons = [];
+
+    // Token-bucket rate limit
+    const mult = this.#routeMultiplier(pathOnly);
+    const rl = this.#consumeToken(ip, mult);
+    if (rl.exceeded) { score += 35; reasons.push('rate_burst'); }
+
+    // UA quality signals
+    if (!ua || ua === '') { score += 50; reasons.push('ua_empty'); }
+    else if (ua.length < 10) { score += 25; reasons.push('ua_too_short'); }
+
+    // Missing Accept-Language
+    if (!req.headers['accept-language']) { score += 20; reasons.push('no_accept_language'); }
+
+    // Missing or generic Accept
+    const accept = req.headers['accept'] || '';
+    if (!accept || accept === '*/*') { score += 15; reasons.push('generic_accept'); }
+
+    // Connection: close
+    if (String(req.headers['connection'] || '').toLowerCase() === 'close') {
+      score += 10; reasons.push('conn_close');
+    }
+
+    // POST with no Referer
+    if (String(req.method || '').toUpperCase() === 'POST' && !req.headers['referer']) {
+      score += 15; reasons.push('post_no_referer');
+    }
+
+    return [Math.max(0, Math.min(100, score)), reasons];
+  }
+
+  async #respondSlow() {
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  #respondDecoy(res, rules) {
+    const html = rules.cloak_html || DECOY_HTML;
+    res.status(200).type('text/html').send(html);
   }
 
   #respondChallenge(req, res) {
