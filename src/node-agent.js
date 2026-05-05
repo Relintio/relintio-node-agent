@@ -8,7 +8,7 @@ import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
 // Update this when bumping agents/node/package.json.
-const AGENT_VERSION = '0.6.0';
+const AGENT_VERSION = '0.7.0';
 
 const INTEL_KEYS = [
   'banned_isps',
@@ -302,7 +302,7 @@ export class UltimateProtectorNodeAgent {
     const [tsRaw, sig] = decoded.split('::');
     const ts = Number(tsRaw);
     if (!Number.isFinite(ts)) return false;
-    if ((Date.now() / 1000) - ts > 60) return false;
+    if ((Date.now() / 1000) - ts > 120) return false;
     const raw = `${ts}|${this.licenseKey}`;
     const calc = crypto.createHmac('sha256', this.licenseKey).update(raw).digest('hex');
     return crypto.timingSafeEqual(Buffer.from(calc), Buffer.from(String(sig)));
@@ -526,7 +526,7 @@ export class UltimateProtectorNodeAgent {
 
       const secure = Boolean(req.secure);
       const cookieVal = this.#passportValue();
-      res.setHeader('Set-Cookie', `aura_passport=${cookieVal}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
+      res.setHeader('Set-Cookie', `aura_passport=${cookieVal}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
 
       // redirect to clean URL (remove query)
       res.redirect(302, pathOnly);
@@ -534,7 +534,11 @@ export class UltimateProtectorNodeAgent {
     }
 
     const cookies = parseCookies(req.headers.cookie);
-    if (cookies.aura_passport && cookies.aura_passport === this.#passportValue()) {
+    const passportVal = this.#passportValue();
+    if (
+      (cookies.aura_passport && cookies.aura_passport === passportVal) ||
+      (cookies.up_passport && cookies.up_passport === passportVal)
+    ) {
       // Verified human
       // log sampled allow
       const ip = normalizeIp(req.ip || req.socket?.remoteAddress);
