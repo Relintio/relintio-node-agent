@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.schemastore.org/package.json",
   "name": "@auraprotector/agent",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "AuraProtector in-process agent for Node runtimes. Provides bot mitigation, threat detection, and adaptive content protection as Express middleware or zero-code preload.",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",

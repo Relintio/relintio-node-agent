@@ -19,6 +19,9 @@ const INTEL_KEYS = [
   'bot_ua_regex',
   'banned_referrers',
   'bad_tls_fingerprints',
+  'scanner_keywords',
+  'honeypot_headers',
+  'blocked_cidrs',
 ];
 
 // --- Additive scoring thresholds (ported from OG engine) ---
@@ -713,6 +716,27 @@ export class UltimateProtectorNodeAgent {
       }
     }
 
+    // L2.5 CIDR infrastructure blocking
+    if (Array.isArray(rules.blocked_cidrs) && rules.blocked_cidrs.length) {
+      for (const cidr of rules.blocked_cidrs) {
+        if (cidr && cidrMatch(ip, String(cidr))) {
+          await this.#log('BLOCK', 'Blocked CIDR', 'blocked_cidr', ctx);
+          return this.#respondBlock(res, rules, ip, 'Blocked CIDR');
+        }
+      }
+    }
+
+    // L2.7 Honeypot header detection
+    if (Array.isArray(rules.honeypot_headers) && rules.honeypot_headers.length) {
+      for (const header of rules.honeypot_headers) {
+        const key = String(header).toLowerCase();
+        if (key && req.headers[key] != null && req.headers[key] !== '') {
+          await this.#log('BLOCK', 'Honeypot Header', 'honeypot_header', ctx);
+          return this.#respondBlock(res, rules, ip, 'Honeypot Header');
+        }
+      }
+    }
+
     // L3 scanner signatures
     if (Array.isArray(rules.scanner_uas)) {
       for (const bad of rules.scanner_uas) {
@@ -807,7 +831,6 @@ export class UltimateProtectorNodeAgent {
     }
 
     // --- Deep Scan: Additive Scoring Engine ---
-    const pathOnly = String(req.path || req.url || '/').split('?')[0];
     const [riskScore, scoreReasons] = this.#scoreRequest(req, ip, ua, pathOnly);
     ctx.risk_score = riskScore;
 
@@ -903,6 +926,18 @@ export class UltimateProtectorNodeAgent {
     // POST with no Referer
     if (String(req.method || '').toUpperCase() === 'POST' && !req.headers['referer']) {
       score += 15; reasons.push('post_no_referer');
+    }
+
+    // Scanner keyword match in UA (soft signal via scoring, not hard block)
+    const scannerKeywords = this.rules?.scanner_keywords;
+    if (Array.isArray(scannerKeywords) && scannerKeywords.length && ua) {
+      const uaLower = ua.toLowerCase();
+      for (const kw of scannerKeywords) {
+        if (kw && uaLower.includes(String(kw).toLowerCase())) {
+          score += 40; reasons.push('scanner_keyword');
+          break;
+        }
+      }
     }
 
     return [Math.max(0, Math.min(100, score)), reasons];
