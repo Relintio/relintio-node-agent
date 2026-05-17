@@ -104,9 +104,29 @@ export class UltimateProtectorNodeAgent {
     return path.join(base, `up_rules_${safe}.json`);
   }
 
+  #cacheMacPath() {
+    return this.cachePath + '.mac';
+  }
+
   async #loadFromDisk() {
     try {
       const raw = await fs.readFile(this.cachePath, 'utf8');
+      // Verify HMAC integrity — prevents cache poisoning on shared hosting
+      try {
+        const storedMac = await fs.readFile(this.#cacheMacPath(), 'utf8');
+        const expectedMac = crypto.createHmac('sha256', this.licenseKey).update(raw).digest('hex');
+        if (!storedMac || storedMac.length !== expectedMac.length ||
+            !crypto.timingSafeEqual(Buffer.from(expectedMac), Buffer.from(storedMac))) {
+          // HMAC mismatch — cache was tampered with, delete and re-fetch
+          await fs.unlink(this.cachePath).catch(() => {});
+          await fs.unlink(this.#cacheMacPath()).catch(() => {});
+          return;
+        }
+      } catch {
+        // No MAC file — legacy cache or first run; delete and re-fetch
+        await fs.unlink(this.cachePath).catch(() => {});
+        return;
+      }
       const json = JSON.parse(raw);
       if (!json || typeof json !== 'object') return;
       if (json.status === 'expired') {
@@ -130,8 +150,13 @@ export class UltimateProtectorNodeAgent {
       const payload = this.status === 'expired'
         ? { synced_at: this.syncedAt, status: 'expired' }
         : { synced_at: this.syncedAt, status: 'success', rules: this.rules };
-      await fs.writeFile(this.cachePath + '.tmp', JSON.stringify(payload), 'utf8');
+      const jsonStr = JSON.stringify(payload);
+      await fs.writeFile(this.cachePath + '.tmp', jsonStr, 'utf8');
       await fs.rename(this.cachePath + '.tmp', this.cachePath);
+      // Write HMAC sidecar for integrity verification on next read
+      const mac = crypto.createHmac('sha256', this.licenseKey).update(jsonStr).digest('hex');
+      await fs.writeFile(this.#cacheMacPath() + '.tmp', mac, 'utf8');
+      await fs.rename(this.#cacheMacPath() + '.tmp', this.#cacheMacPath());
     } catch {
       // ignore
     }
