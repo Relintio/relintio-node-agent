@@ -35,7 +35,7 @@ If you prefer not to modify application code, preload the agent via `NODE_OPTION
 
 ```bash
 export UP_LICENSE_KEY='UP_LIVE_...'
-export UP_API_URL='https://app.auraguardian.co/api'
+export UP_API_URL='https://auraguardian.co/api'
 export NODE_OPTIONS='--require @auraprotector/agent/preload'
 
 node server.js
@@ -74,7 +74,7 @@ Replaces the legacy fixed-window counter. Default: **8 tokens/sec**, burst capac
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `licenseKey` | `string` | — | **Required.** Your AuraGuardian license key. |
-| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://app.auraguardian.co/api` |
+| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://auraguardian.co/api` |
 | `syncIntervalSeconds` | `number` | `60` | How often to re-fetch rules from the cloud. |
 | `allowSampleRate` | `number` | `0.01` | Telemetry sampling rate for ALLOW decisions. |
 | `onlyPaths` | `string[]` | — | Exact (`/checkout`) or prefix (`/product/*`) path whitelist. |
@@ -98,6 +98,18 @@ Results are cached in-memory (24h TTL) to minimize round-trips.
 ## Security
 
 If you discover a security vulnerability, please report it to **support@auraguardian.co**. Do not open a public issue.
+
+### ⚠️ CVE-2026-4926 — `path-to-regexp` ReDoS
+
+**Severity:** High (CVSS 7.5) · **Affects:** Express ≤ 4.21.1 via `path-to-regexp` < 8.4.0
+
+If you use `@auraprotector/agent` in Express middleware mode, ensure your `express` dependency is **≥ 4.21.2** to include the patched `path-to-regexp`. Run:
+
+```bash
+npm update express
+```
+
+The agent itself does not bundle Express — it is your application's responsibility to keep it updated.
 
 ## License
 

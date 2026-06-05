@@ -2,6 +2,14 @@
 
 All notable changes to `@auraprotector/agent` will be documented in this file.
 
+## [0.10.2] — 2026-06-06
+
+### Security
+- **CVE-2026-4926** — Added advisory for `path-to-regexp` ReDoS vulnerability (CVSS 7.5). Users in Express middleware mode should update to `express` ≥ 4.21.2. The bundled `express-demo` example now pins `^4.21.2`.
+
+### Fixed
+- Corrected API URL in docs from `https://app.auraguardian.co/api` to `https://auraguardian.co/api` — the `app.` subdomain does not exist.
+
 ## [0.6.0] — 2026-05-05
 
 ### Added
