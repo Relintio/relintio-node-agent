@@ -433,6 +433,11 @@ export class UltimateProtectorNodeAgent {
       '.petalbot.com',
       '.bytespider.com',
       '.crawl.yahoo.net', '.yahoo.com',
+      // Social media crawlers (rDNS-verifiable)
+      '.facebook.com', '.fbsv.net', '.tfbnw.net',
+      '.linkedin.com',
+      '.twttr.com', '.twitter.com', '.x.com',
+      '.pinterest.com',
     ];
 
     const now = Math.floor(Date.now() / 1000);
@@ -487,10 +492,26 @@ export class UltimateProtectorNodeAgent {
       'petalbot',
       'bytespider',
       'slurp',
+      // Social media crawlers (rDNS-verifiable)
+      'facebookexternalhit', 'facebookcatalog', 'meta-externalagent',
+      'linkedinbot',
+      'twitterbot',
+      'pinterest',
     ];
 
     if (!tokens.some((t) => uaLower.includes(t))) return false;
     return this.#isVerifiedSeoIp(ip);
+  }
+
+  /**
+   * Social preview bots that use cloud infra without consistent rDNS.
+   * These only fetch page metadata (OG tags) for link unfurling — low risk.
+   * Allowed by UA match alone when SEO safety is enabled.
+   */
+  #isKnownSocialPreviewBot(ua) {
+    const uaLower = String(ua ?? '').toLowerCase();
+    const socialTokens = ['slackbot', 'slack-imgproxy', 'discordbot', 'telegrambot', 'whatsapp'];
+    return socialTokens.some((t) => uaLower.includes(t));
   }
 
   #buildBlockedIpSet(rules) {
@@ -680,6 +701,10 @@ export class UltimateProtectorNodeAgent {
         await this.#log('ALLOW', 'SEO Safety', null, ctx);
         return next();
       }
+      if (this.#isKnownSocialPreviewBot(ua)) {
+        await this.#log('ALLOW', 'SEO Safety (Social Preview)', null, ctx);
+        return next();
+      }
     } else {
       // SEO safety OFF: ALL bots are denied.
       // Verified real crawlers → soft block (no ban). Fakes → hard block (ban).
@@ -854,6 +879,23 @@ export class UltimateProtectorNodeAgent {
         }
       }
     }
+    // L5.5 Custom WAF Rules (per-license, premium feature)
+    if (Array.isArray(rules.custom_waf_rules) && rules.custom_waf_rules.length) {
+      const wafResult = this.#evaluateCustomWafRules(rules.custom_waf_rules, ctx, req);
+      if (wafResult) {
+        if (wafResult.action === 'block') {
+          await this.#log('BLOCK', `Custom WAF: ${wafResult.type}`, 'custom_waf', ctx);
+          return this.#respondBlock(res, rules, ip, 'Custom WAF Rule');
+        }
+        if (wafResult.action === 'challenge') {
+          await this.#log('CHALLENGE', `Custom WAF: ${wafResult.type}`, 'custom_waf', ctx);
+          return this.#respondChallenge(req, res);
+        }
+        if (wafResult.action === 'log') {
+          await this.#log('ALLOW', `Custom WAF (log-only): ${wafResult.type}`, 'custom_waf_log', ctx);
+        }
+      }
+    }
 
     // --- Deep Scan: Additive Scoring Engine ---
     const [riskScore, scoreReasons] = this.#scoreRequest(req, ip, ua, pathOnly);
@@ -966,6 +1008,73 @@ export class UltimateProtectorNodeAgent {
     }
 
     return [Math.max(0, Math.min(100, score)), reasons];
+  }
+
+  /**
+   * Evaluate per-license custom WAF rules.
+   * @param {Array<{type:string,value:string,action:string}>} wafRules
+   * @param {{ip:string,ua:string,path:string}} ctx
+   * @param {import('http').IncomingMessage} req
+   * @returns {{type:string,value:string,action:string}|null}
+   */
+  #evaluateCustomWafRules(wafRules, ctx, req) {
+    for (const rule of wafRules) {
+      if (!rule || typeof rule !== 'object') continue;
+      const { type, value, action } = rule;
+      if (!type || !value) continue;
+
+      try {
+        switch (type) {
+          case 'ip_block':
+            if (value.includes('/')) {
+              // CIDR match
+              if (cidrMatch(ctx.ip, value)) return { type, value, action: action || 'block' };
+            } else if (ctx.ip === value) {
+              return { type, value, action: action || 'block' };
+            }
+            break;
+
+          case 'path_block': {
+            // Regex test — wrap in delimiters if needed
+            let pattern = value;
+            if (pattern[0] !== '/' && pattern[0] !== '#' && pattern[0] !== '~') {
+              pattern = value;
+            }
+            const re = new RegExp(pattern, 'i');
+            if (re.test(ctx.path)) return { type, value, action: action || 'block' };
+            break;
+          }
+
+          case 'header_match': {
+            // value format: "Header-Name" or "Header-Name: expectedValue"
+            const colonIdx = value.indexOf(':');
+            if (colonIdx === -1) {
+              // Just check header presence
+              if (req.headers[value.toLowerCase()] != null) {
+                return { type, value, action: action || 'block' };
+              }
+            } else {
+              const headerName = value.substring(0, colonIdx).trim().toLowerCase();
+              const headerVal = value.substring(colonIdx + 1).trim().toLowerCase();
+              const actual = String(req.headers[headerName] || '').toLowerCase();
+              if (actual && actual.includes(headerVal)) {
+                return { type, value, action: action || 'block' };
+              }
+            }
+            break;
+          }
+
+          case 'ua_block':
+            if (ctx.ua && ctx.ua.toLowerCase().includes(value.toLowerCase())) {
+              return { type, value, action: action || 'block' };
+            }
+            break;
+        }
+      } catch {
+        // Skip malformed rules (e.g. invalid regex)
+      }
+    }
+    return null;
   }
 
   async #respondSlow() {
