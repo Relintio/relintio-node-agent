@@ -41,7 +41,7 @@ export NODE_OPTIONS='--require @auraprotector/agent/preload'
 node server.js
 ```
 
-## Risk Scoring Engine (v0.6.0+)
+## Risk Scoring Engine (v0.10.2)
 
 Every request is evaluated using an **additive 0-100 signal-based score**. Signals include:
 
