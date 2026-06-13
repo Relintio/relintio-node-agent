@@ -265,6 +265,15 @@ export class UltimateProtectorNodeAgent {
         return;
       }
 
+      // Quota exceeded: fail-open, stop protecting temporarily.
+      if (res.json?.status === 'quota_exceeded') {
+        this.status = 'expired';
+        this.rules = null;
+        this.syncedAt = now;
+        await this.#saveToDisk();
+        return;
+      }
+
       if (res.json?.status === 'success') {
         if (res.json.encrypted && res.json.payload) {
           const decoded = this.#aesDecryptBase64(res.json.payload);
@@ -659,6 +668,18 @@ export class UltimateProtectorNodeAgent {
     if (!rules || typeof rules !== 'object') {
       // fail-open if no rules (parity with PHP agent)
       return next();
+    }
+
+    // Check server-provided bypass_paths
+    if (Array.isArray(rules.bypass_paths) && rules.bypass_paths.length) {
+      if (!shouldProtectRequest({
+        path: pathOnly,
+        onlyPaths: null,
+        exceptPaths: rules.bypass_paths,
+        onlyRegex: null,
+      })) {
+        return next();
+      }
     }
 
     // Obsidian (best-effort)

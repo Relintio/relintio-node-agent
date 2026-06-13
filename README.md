@@ -6,6 +6,8 @@
 
 In-process bot-mitigation agent for Node.js runtimes. Connects to the AuraGuardian cloud to enforce real-time threat detection, IP reputation, adaptive content protection, and **additive risk scoring** with graduated response.
 
+> **Note on Features & Quotas**: Advanced features (like Bot Challenge and Custom Shield Pages) are tied to your subscription plan. If you exceed your monthly API quota, the agent will operate in a degraded mode (basic protection) before ultimately failing-open to prevent locking you out of your own site. All configuration rules are centrally managed via the dashboard.
+
 ## Installation
 
 ```bash
@@ -82,6 +84,27 @@ Replaces the legacy fixed-window counter. Default: **8 tokens/sec**, burst capac
 | `onlyRegex` | `string` | — | JS regex source, e.g. `^/checkout` or `/.../flags`. |
 | `rateLimitPerMinute` | `number` | `120` | Per-IP request cap. `0` disables. |
 | `enforceTlsMinVersion` | `boolean` | `true` | Block connections below TLS 1.2. |
+
+## Path Bypass Rules (Server-Side)
+
+If your application serves both browser traffic **and** API/webhook endpoints, machine callers (curl, python-requests, Go-http-client) will be scored as bots by default.
+
+To prevent false positives, configure **Bypass Rules** in the AuraGuardian dashboard:
+
+**Settings → Access Control → Bypass Rules**
+
+```
+/api/*
+/webhooks/*
+/health
+/.well-known/*
+```
+
+Requests matching a bypass pattern skip **all** bot detection layers — no scoring, no challenge. Use `*` as a wildcard. One pattern per line.
+
+> ⚠️ Bypassed paths have **zero** bot protection. Only bypass paths you fully control (API endpoints, webhook receivers, health checks). Never bypass login or user-facing form routes.
+
+This is a server-side configuration — no code changes needed in your Node.js application.
 
 ## Geo Enrichment
 

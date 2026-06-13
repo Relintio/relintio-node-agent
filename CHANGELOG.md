@@ -2,6 +2,11 @@
 
 All notable changes to `@auraprotector/agent` will be documented in this file.
 
+## [0.11.0] — 2026-06-13
+
+### Changed
+- **Plan Constraints & Fail-Open Strategy** - Advanced features (like Bot Challenge and Custom Shield Pages) are now strictly bound to the user's plan. If the monthly API quota is exceeded, the agent will operate in a degraded mode (basic protection) before ultimately failing-open to prevent locking you out of your own site. All configuration rules are centrally managed via the dashboard.
+
 ## [0.10.2] — 2026-06-06
 
 ### Security
