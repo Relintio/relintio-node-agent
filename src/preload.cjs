@@ -1,7 +1,7 @@
 /*
  * UltimateProtector Node agent preload (CommonJS)
  * Enable with:
- *   NODE_OPTIONS="--require @auraprotector/agent/preload" node server.js
+ *   NODE_OPTIONS="--require @relintio/agent/preload" node server.js
  *
  * Reads env:
  *   UP_LICENSE_KEY (required)

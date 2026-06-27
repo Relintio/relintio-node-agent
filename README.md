@@ -1,24 +1,24 @@
-# @auraprotector/agent
+# @relintio/agent
 
-[![npm version](https://img.shields.io/npm/v/@auraprotector/agent)](https://www.npmjs.com/package/@auraprotector/agent)
-[![Node.js](https://img.shields.io/node/v/@auraprotector/agent)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/@relintio/agent)](https://www.npmjs.com/package/@relintio/agent)
+[![Node.js](https://img.shields.io/node/v/@relintio/agent)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-Proprietary-blue)](./LICENSE)
 
-In-process bot-mitigation agent for Node.js runtimes. Connects to the AuraGuardian cloud to enforce real-time threat detection, IP reputation, adaptive content protection, and **additive risk scoring** with graduated response.
+In-process bot-mitigation agent for Node.js runtimes. Connects to the Relintio cloud to enforce real-time threat detection, IP reputation, adaptive content protection, and **additive risk scoring** with graduated response.
 
 > **Note on Features & Quotas**: Advanced features (like Bot Challenge and Custom Shield Pages) are tied to your subscription plan. If you exceed your monthly API quota, the agent will operate in a degraded mode (basic protection) before ultimately failing-open to prevent locking you out of your own site. All configuration rules are centrally managed via the dashboard.
 
 ## Installation
 
 ```bash
-npm install @auraprotector/agent
+npm install @relintio/agent
 ```
 
 ## Express Middleware
 
 ```js
 import express from 'express';
-import { ultimateProtectorExpress } from '@auraprotector/agent/express';
+import { ultimateProtectorExpress } from '@relintio/agent/express';
 
 const app = express();
 
@@ -37,8 +37,8 @@ If you prefer not to modify application code, preload the agent via `NODE_OPTION
 
 ```bash
 export UP_LICENSE_KEY='UP_LIVE_...'
-export UP_API_URL='https://auraguardian.co/api'
-export NODE_OPTIONS='--require @auraprotector/agent/preload'
+export UP_API_URL='https://relintio.com/api'
+export NODE_OPTIONS='--require @relintio/agent/preload'
 
 node server.js
 ```
@@ -75,8 +75,8 @@ Replaces the legacy fixed-window counter. Default: **8 tokens/sec**, burst capac
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `licenseKey` | `string` | — | **Required.** Your AuraGuardian license key. |
-| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://auraguardian.co/api` |
+| `licenseKey` | `string` | — | **Required.** Your Relintio license key. |
+| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://relintio.com/api` |
 | `syncIntervalSeconds` | `number` | `60` | How often to re-fetch rules from the cloud. |
 | `allowSampleRate` | `number` | `0.01` | Telemetry sampling rate for ALLOW decisions. |
 | `onlyPaths` | `string[]` | — | Exact (`/checkout`) or prefix (`/product/*`) path whitelist. |
@@ -89,7 +89,7 @@ Replaces the legacy fixed-window counter. Default: **8 tokens/sec**, burst capac
 
 If your application serves both browser traffic **and** API/webhook endpoints, machine callers (curl, python-requests, Go-http-client) will be scored as bots by default.
 
-To prevent false positives, configure **Bypass Rules** in the AuraGuardian dashboard:
+To prevent false positives, configure **Bypass Rules** in the Relintio dashboard:
 
 **Settings → Access Control → Bypass Rules**
 
@@ -116,17 +116,17 @@ Results are cached in-memory (24h TTL) to minimize round-trips.
 
 - Node.js ≥ 18
 - Express ≥ 4 (for middleware mode)
-- Active [AuraGuardian](https://auraguardian.co) license
+- Active [Relintio](https://relintio.com) license
 
 ## Security
 
-If you discover a security vulnerability, please report it to **support@auraguardian.co**. Do not open a public issue.
+If you discover a security vulnerability, please report it to **support@relintio.com**. Do not open a public issue.
 
 ### ⚠️ CVE-2026-4926 — `path-to-regexp` ReDoS
 
 **Severity:** High (CVSS 7.5) · **Affects:** Express ≤ 4.21.1 via `path-to-regexp` < 8.4.0
 
-If you use `@auraprotector/agent` in Express middleware mode, ensure your `express` dependency is **≥ 4.21.2** to include the patched `path-to-regexp`. Run:
+If you use `@relintio/agent` in Express middleware mode, ensure your `express` dependency is **≥ 4.21.2** to include the patched `path-to-regexp`. Run:
 
 ```bash
 npm update express

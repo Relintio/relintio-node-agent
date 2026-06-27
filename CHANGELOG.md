@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@auraprotector/agent` will be documented in this file.
+All notable changes to `@relintio/agent` will be documented in this file.
 
 ## [0.11.0] — 2026-06-13
 
@@ -13,7 +13,7 @@ All notable changes to `@auraprotector/agent` will be documented in this file.
 - **CVE-2026-4926** — Added advisory for `path-to-regexp` ReDoS vulnerability (CVSS 7.5). Users in Express middleware mode should update to `express` ≥ 4.21.2. The bundled `express-demo` example now pins `^4.21.2`.
 
 ### Fixed
-- Corrected API URL in docs from `https://app.auraguardian.co/api` to `https://auraguardian.co/api` — the `app.` subdomain does not exist.
+- Corrected API URL in docs from `https://app.relintio.com/api` to `https://relintio.com/api` — the `app.` subdomain does not exist.
 
 ## [0.6.0] — 2026-05-05
 
@@ -45,7 +45,7 @@ All notable changes to `@auraprotector/agent` will be documented in this file.
 ## [0.2.2] — 2026-04-23
 
 ### Fixed
-- Corrected domain references from `auraguardian.com` to `auraguardian.co` globally.
+- Corrected domain references from `relintio.comm` to `relintio.com` globally.
 
 ## [0.2.1] — 2026-04-23
 
