@@ -45,6 +45,12 @@
       "optional": true
     }
   },
+  "overrides": {
+    "range-parser": "1.2.1"
+  },
+  "resolutions": {
+    "range-parser": "1.2.1"
+  },
   "sideEffects": false,
   "publishConfig": {
     "access": "public"

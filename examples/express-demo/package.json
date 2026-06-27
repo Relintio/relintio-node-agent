@@ -4,5 +4,11 @@
   "type": "module",
   "dependencies": {
     "express": "^4.21.2"
+  },
+  "overrides": {
+    "range-parser": "1.2.1"
+  },
+  "resolutions": {
+    "range-parser": "1.2.1"
   }
 }
