@@ -623,7 +623,7 @@ export class UltimateProtectorNodeAgent {
 
       const secure = Boolean(req.secure);
       const cookieVal = this.#passportValue();
-      res.setHeader('Set-Cookie', `aura_passport=${cookieVal}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
+      res.setHeader('Set-Cookie', `relintio_passport=${cookieVal}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
 
       // redirect to clean URL (remove query)
       res.redirect(302, pathOnly);
@@ -633,7 +633,7 @@ export class UltimateProtectorNodeAgent {
     const cookies = parseCookies(req.headers.cookie);
     const passportVal = this.#passportValue();
     if (
-      (cookies.aura_passport && cookies.aura_passport === passportVal) ||
+      (cookies.relintio_passport && cookies.relintio_passport === passportVal) ||
       (cookies.up_passport && cookies.up_passport === passportVal)
     ) {
       // Verified human
