@@ -2,6 +2,11 @@
 
 All notable changes to `@relintio/agent` will be documented in this file.
 
+## [0.11.2] — 2026-07-03
+
+### Added
+- **Curl Safety Paths support** — Implemented bypass for scanner UA signatures, bot regex, and scoring checks when requesting paths defined in `curl_safety_paths`.
+
 ## [0.11.0] — 2026-06-13
 
 ### Changed

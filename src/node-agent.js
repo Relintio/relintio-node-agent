@@ -8,7 +8,7 @@ import { applyObsidianToResponse, isHoneypotTrap } from './obsidian.js';
 
 // Keep a hardcoded version to avoid JSON import/loader differences across Node runtimes.
 // Update this when bumping agents/node/package.json.
-const AGENT_VERSION = '0.11.1';
+const AGENT_VERSION = '0.11.2';
 
 const INTEL_KEYS = [
   'banned_isps',
@@ -682,6 +682,16 @@ export class UltimateProtectorNodeAgent {
       }
     }
 
+    let isCurlSafe = false;
+    if (Array.isArray(rules.curl_safety_paths) && rules.curl_safety_paths.length) {
+      isCurlSafe = !shouldProtectRequest({
+        path: pathOnly,
+        onlyPaths: null,
+        exceptPaths: rules.curl_safety_paths,
+        onlyRegex: null,
+      });
+    }
+
     // Obsidian (best-effort)
     if (rules.obsidian_active) {
       applyObsidianToResponse(req, res, rules);
@@ -808,26 +818,28 @@ export class UltimateProtectorNodeAgent {
       }
     }
 
-    // L3 scanner signatures
-    if (Array.isArray(rules.scanner_uas)) {
-      for (const bad of rules.scanner_uas) {
-        if (bad && ua.toLowerCase().includes(String(bad).toLowerCase())) {
-          await this.#log('BLOCK', 'Bot Signature', 'bot_signature', ctx);
-          return this.#respondBlock(res, rules, ip, 'Bot Signature');
+    if (!isCurlSafe) {
+      // L3 scanner signatures
+      if (Array.isArray(rules.scanner_uas)) {
+        for (const bad of rules.scanner_uas) {
+          if (bad && ua.toLowerCase().includes(String(bad).toLowerCase())) {
+            await this.#log('BLOCK', 'Bot Signature', 'bot_signature', ctx);
+            return this.#respondBlock(res, rules, ip, 'Bot Signature');
+          }
         }
       }
-    }
 
-    // L3 bot regex
-    if (rules.bot_ua_regex) {
-      try {
-        const re = compilePhpLikeRegex(rules.bot_ua_regex) ?? new RegExp(String(rules.bot_ua_regex));
-        if (re.test(ua)) {
-          await this.#log('BLOCK', 'Bot Regex', 'bot_regex', ctx);
-          return this.#respondBlock(res, rules, ip, 'Bot Regex');
+      // L3 bot regex
+      if (rules.bot_ua_regex) {
+        try {
+          const re = compilePhpLikeRegex(rules.bot_ua_regex) ?? new RegExp(String(rules.bot_ua_regex));
+          if (re.test(ua)) {
+            await this.#log('BLOCK', 'Bot Regex', 'bot_regex', ctx);
+            return this.#respondBlock(res, rules, ip, 'Bot Regex');
+          }
+        } catch {
+          // ignore invalid regex
         }
-      } catch {
-        // ignore invalid regex
       }
     }
 
@@ -918,26 +930,28 @@ export class UltimateProtectorNodeAgent {
       }
     }
 
-    // --- Deep Scan: Additive Scoring Engine ---
-    const [riskScore, scoreReasons] = this.#scoreRequest(req, ip, ua, pathOnly);
-    ctx.risk_score = riskScore;
+    if (!isCurlSafe) {
+      // --- Deep Scan: Additive Scoring Engine ---
+      const [riskScore, scoreReasons] = this.#scoreRequest(req, ip, ua, pathOnly);
+      ctx.risk_score = riskScore;
 
-    if (riskScore >= THRESHOLDS.BLOCK) {
-      await this.#log('BLOCK', `High Risk Score (${riskScore}): ${scoreReasons.join(', ')}`, 'high_risk_score', ctx);
-      return this.#respondBlock(res, rules, ip, 'Risk Assessment');
-    }
-    if (riskScore >= THRESHOLDS.DECOY) {
-      await this.#log('DECOY', `Decoy Score (${riskScore}): ${scoreReasons.join(', ')}`, 'decoy', ctx);
-      return this.#respondDecoy(res, rules);
-    }
-    if (riskScore >= THRESHOLDS.CHALLENGE) {
-      await this.#log('CHALLENGE', `Challenge Score (${riskScore}): ${scoreReasons.join(', ')}`, 'challenge_score', ctx);
-      return this.#respondChallenge(req, res);
-    }
-    if (riskScore >= THRESHOLDS.SLOW) {
-      await this.#log('SLOW', `Slow Score (${riskScore}): ${scoreReasons.join(', ')}`, 'slow', ctx);
-      await this.#respondSlow();
-      // continues to allow after delay
+      if (riskScore >= THRESHOLDS.BLOCK) {
+        await this.#log('BLOCK', `High Risk Score (${riskScore}): ${scoreReasons.join(', ')}`, 'high_risk_score', ctx);
+        return this.#respondBlock(res, rules, ip, 'Risk Assessment');
+      }
+      if (riskScore >= THRESHOLDS.DECOY) {
+        await this.#log('DECOY', `Decoy Score (${riskScore}): ${scoreReasons.join(', ')}`, 'decoy', ctx);
+        return this.#respondDecoy(res, rules);
+      }
+      if (riskScore >= THRESHOLDS.CHALLENGE) {
+        await this.#log('CHALLENGE', `Challenge Score (${riskScore}): ${scoreReasons.join(', ')}`, 'challenge_score', ctx);
+        return this.#respondChallenge(req, res);
+      }
+      if (riskScore >= THRESHOLDS.SLOW) {
+        await this.#log('SLOW', `Slow Score (${riskScore}): ${scoreReasons.join(', ')}`, 'slow', ctx);
+        await this.#respondSlow();
+        // continues to allow after delay
+      }
     }
 
     await this.#log('ALLOW', 'Clean Traffic', null, ctx);
