@@ -350,15 +350,19 @@ export class UltimateProtectorNodeAgent {
   }
 
   #verifyToken(token) {
-    const decoded = Buffer.from(String(token), 'base64').toString('utf8');
+    const encoded = String(token);
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) return false;
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
     if (!decoded.includes('::')) return false;
     const [tsRaw, sig] = decoded.split('::');
     const ts = Number(tsRaw);
     if (!Number.isFinite(ts)) return false;
-    if ((Date.now() / 1000) - ts > 120) return false;
+    if (Math.abs((Date.now() / 1000) - ts) > 120) return false;
     const raw = `${ts}|${this.licenseKey}`;
     const calc = crypto.createHmac('sha256', this.licenseKey).update(raw).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(calc), Buffer.from(String(sig)));
+    const expected = Buffer.from(calc);
+    const supplied = Buffer.from(String(sig));
+    return expected.length === supplied.length && crypto.timingSafeEqual(expected, supplied);
   }
 
   async #rdnsLookup(ip) {
@@ -1121,7 +1125,7 @@ export class UltimateProtectorNodeAgent {
     res.status(200).type('text/html').send(html);
   }
 
-  #respondChallenge(req, res) {
+  async #respondChallenge(req, res) {
     const proto = Boolean(req.secure) ? 'https' : 'http';
     const host = String(req.headers.host || '');
     const pathOnly = String(req.originalUrl || req.url || '/').split('?')[0] || '/';
@@ -1131,20 +1135,23 @@ export class UltimateProtectorNodeAgent {
     const rid = `RAY-${crypto.randomBytes(6).toString('hex')}`;
     const ip = normalizeIp(req.ip || req.socket?.remoteAddress) || '0.0.0.0';
 
-    this.#postJson('/agent/challenge/init', {
-      license_key: this.licenseKey,
-      return_url: currentUrl,
-    }, 2000)
-      .then((r) => {
-        const token = r?.json?.token;
-        if (r?.ok && typeof token === 'string' && token.length > 20) {
-          res.redirect(302, `${baseUrl}/security-check?token=${encodeURIComponent(token)}`);
-          return;
-        }
-        // Fallback: block page instead of leaking license_key in URL
-        res.status(403).type('text/html').send(this.#blockHtml(ip, 'Verification Required', rid));
-      })
-      .catch(() => res.status(403).type('text/html').send(this.#blockHtml(ip, 'Verification Required', rid)));
+    try {
+      const response = await this.#postJson('/agent/challenge/init', {
+        license_key: this.licenseKey,
+        return_url: currentUrl,
+      }, 2000);
+      const token = response?.json?.token;
+      if (!res.headersSent && response?.ok && typeof token === 'string' && token.length > 20) {
+        res.redirect(302, `${baseUrl}/security-check?token=${encodeURIComponent(token)}`);
+        return;
+      }
+    } catch {
+      // Fail closed below without exposing the license key.
+    }
+
+    if (!res.headersSent) {
+      res.status(403).type('text/html').send(this.#blockHtml(ip, 'Verification Required', rid));
+    }
   }
 
   #respondBlock(res, rules, ip, reason) {

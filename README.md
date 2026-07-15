@@ -43,7 +43,7 @@ export NODE_OPTIONS='--require @relintio/agent/preload'
 node server.js
 ```
 
-## Risk Scoring Engine (v0.10.2)
+## Risk Scoring Engine (v0.11.2)
 
 Every request is evaluated using an **additive 0-100 signal-based score**. Signals include:
 

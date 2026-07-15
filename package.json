@@ -11,12 +11,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/relintio/Relintio.git",
-    "directory": "agents/node"
+    "url": "git+https://github.com/Relintio/relintio-node-agent.git"
   },
   "homepage": "https://relintio.com/docs",
   "bugs": {
-    "email": "support@relintio.com"
+    "url": "https://github.com/Relintio/relintio-node-agent/issues"
   },
   "funding": {
     "type": "commercial",
