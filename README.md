@@ -37,7 +37,7 @@ If you prefer not to modify application code, preload the agent via `NODE_OPTION
 
 ```bash
 export UP_LICENSE_KEY='UP_LIVE_...'
-export UP_API_URL='https://relintio.com/api'
+export UP_API_URL='https://api.relintio.com/v1'
 export NODE_OPTIONS='--require @relintio/agent/preload'
 
 node server.js
@@ -76,8 +76,8 @@ Replaces the legacy fixed-window counter. Default: **8 tokens/sec**, burst capac
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `licenseKey` | `string` | — | **Required.** Your Relintio license key. |
-| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://relintio.com/api` |
-| `syncIntervalSeconds` | `number` | `60` | How often to re-fetch rules from the cloud. |
+| `apiUrl` | `string` | — | **Required.** API endpoint, e.g. `https://api.relintio.com/v1` |
+| `syncIntervalSeconds` | `number` | `10` | Target rule refresh cadence; jitter and failure backoff are automatic. |
 | `allowSampleRate` | `number` | `0.01` | Telemetry sampling rate for ALLOW decisions. |
 | `onlyPaths` | `string[]` | — | Exact (`/checkout`) or prefix (`/product/*`) path whitelist. |
 | `exceptPaths` | `string[]` | — | Paths to exclude from protection. |
@@ -108,7 +108,7 @@ This is a server-side configuration — no code changes needed in your Node.js a
 
 ## Geo Enrichment
 
-When CDN geo headers (`CF-IPCountry`, etc.) are absent, the agent calls the platform's `/api/agent/geo-lookup` endpoint.
+When CDN geo headers (`CF-IPCountry`, etc.) are absent, the agent calls the canonical `/v1/agent/geo-lookup` endpoint on `api.relintio.com`.
 The server resolves the country using **local MaxMind GeoLite2 databases** — zero external API calls, zero cost, microsecond latency.
 Results are cached in-memory (24h TTL) to minimize round-trips.
 
@@ -137,3 +137,12 @@ The agent itself does not bundle Express — it is your application's responsibi
 ## License
 
 Proprietary — see [LICENSE](./LICENSE) for details.
+
+## Dashboard Deployment Workflow
+
+1. Open **Dashboard → Deployment**, select **Node.js**, and choose Express or Node HTTP.
+2. Download the recommended package and register the middleware before application routes.
+3. Restart the Node process, then open one public route handled by the middleware.
+4. Enter that exact URL or public IP endpoint in Relintio and select **Verify target**.
+
+The agent reports runtime kind `node` and its version on synchronization and heartbeat requests. Configuration revisions are received automatically.

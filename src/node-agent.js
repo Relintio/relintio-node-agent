@@ -46,7 +46,7 @@ export class UltimateProtectorNodeAgent {
 
     this.licenseKey = String(options.licenseKey);
     this.apiUrl = String(options.apiUrl).replace(/\/+$/, '');
-    this.syncIntervalSeconds = Math.max(10, Number(options.syncIntervalSeconds ?? 60) || 60);
+    this.syncIntervalSeconds = Math.max(10, Number(options.syncIntervalSeconds ?? 10) || 10);
     this.allowSampleRate = Math.max(0, Math.min(1, Number(options.allowSampleRate ?? 0.01) || 0));
     this.rateLimitPerMinute = Math.max(0, Number(options.rateLimitPerMinute ?? 120) || 0);
 
@@ -68,6 +68,8 @@ export class UltimateProtectorNodeAgent {
     this.status = 'empty'; // empty|success|expired
 
     this.refreshPromise = null;
+    this.nextSyncAt = 0;
+    this.syncFailures = 0;
 
     // RDNS cache
     this.rdnsTtlSeconds = 86400;
@@ -242,7 +244,12 @@ export class UltimateProtectorNodeAgent {
       try {
         res = await this.#postJson('/agent/verify', payload, 5000);
       } catch {
-        // fail-open: keep current rules on transient network errors
+        this.#scheduleNextSync(true);
+        return;
+      }
+
+      if (!res.ok) {
+        this.#scheduleNextSync(true);
         return;
       }
 
@@ -253,6 +260,7 @@ export class UltimateProtectorNodeAgent {
         this.rules = null;
         this.syncedAt = now;
         await this.#saveToDisk();
+        this.#scheduleNextSync(false);
         return;
       }
 
@@ -262,6 +270,7 @@ export class UltimateProtectorNodeAgent {
         this.rules = null;
         this.syncedAt = now;
         await this.#saveToDisk();
+        this.#scheduleNextSync(false);
         return;
       }
 
@@ -271,6 +280,7 @@ export class UltimateProtectorNodeAgent {
         this.rules = null;
         this.syncedAt = now;
         await this.#saveToDisk();
+        this.#scheduleNextSync(false);
         return;
       }
 
@@ -305,6 +315,7 @@ export class UltimateProtectorNodeAgent {
             this.rules = merged;
             this.syncedAt = now;
             await this.#saveToDisk();
+            this.#scheduleNextSync(false);
             return;
           }
         }
@@ -315,9 +326,12 @@ export class UltimateProtectorNodeAgent {
           this.rules = null;
           this.syncedAt = now;
           await this.#saveToDisk();
+          this.#scheduleNextSync(false);
           return;
         }
       }
+
+      this.#scheduleNextSync(true);
     })().finally(() => {
       this.refreshPromise = null;
     });
@@ -331,7 +345,7 @@ export class UltimateProtectorNodeAgent {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const stale = (now - (this.syncedAt || 0)) > this.syncIntervalSeconds;
+    const stale = now >= this.nextSyncAt;
 
     if (!this.rules && this.status !== 'expired') {
       await this.refreshRules(domain);
@@ -343,6 +357,15 @@ export class UltimateProtectorNodeAgent {
     }
 
     return this.rules;
+  }
+
+  #scheduleNextSync(failed) {
+    this.syncFailures = failed ? Math.min(this.syncFailures + 1, 5) : 0;
+    const base = failed
+      ? Math.min(300, this.syncIntervalSeconds * (2 ** this.syncFailures))
+      : this.syncIntervalSeconds;
+    const jittered = Math.max(8, Math.round(base * (0.8 + Math.random() * 0.4)));
+    this.nextSyncAt = Math.floor(Date.now() / 1000) + jittered;
   }
 
   #passportValue() {
@@ -550,6 +573,7 @@ export class UltimateProtectorNodeAgent {
       license_key: this.licenseKey,
       domain: domain ?? 'unknown',
       agent_version: this.agentVersion,
+      agent_kind: this.agentKind,
       timestamp: Math.floor(now / 1000),
     }, 2000).catch(() => {});
   }
@@ -797,7 +821,7 @@ export class UltimateProtectorNodeAgent {
       const inList = rules.block_geo.includes(country);
       if ((isWhitelist && !inList) || (!isWhitelist && inList)) {
         await this.#log('BLOCK', 'Geo Firewall', 'geo_soft', ctx);
-        return this.#respondSoftBlock(res, rules, ip, 'Geo Firewall');
+        return this.#respondGeoBlock(req, res);
       }
     }
 
@@ -866,23 +890,8 @@ export class UltimateProtectorNodeAgent {
           }
         }
 
-        if (Array.isArray(rules.banned_isps)) {
-          for (const isp of rules.banned_isps) {
-            if (isp && String(hostname).toLowerCase().includes(String(isp).toLowerCase())) {
-              await this.#log('BLOCK', 'Banned ISP', 'banned_isp', ctx);
-              return this.#respondBlock(res, rules, ip, 'Banned ISP');
-            }
-          }
-        }
-
-        if (Array.isArray(rules.banned_asns)) {
-          for (const asn of rules.banned_asns) {
-            if (asn && String(hostname).toLowerCase().includes(String(asn).toLowerCase())) {
-              await this.#log('BLOCK', 'Banned ASN', 'banned_asn', ctx);
-              return this.#respondBlock(res, rules, ip, 'Banned ASN');
-            }
-          }
-        }
+        // Provider and ASN labels are analysis metadata only. Reverse DNS is
+        // not authoritative enough for blocking; exact ranges use CIDR rules.
       }
     }
 
@@ -1040,7 +1049,7 @@ export class UltimateProtectorNodeAgent {
       const uaLower = ua.toLowerCase();
       for (const kw of scannerKeywords) {
         if (kw && uaLower.includes(String(kw).toLowerCase())) {
-          score += 40; reasons.push('scanner_keyword');
+          score += 15; reasons.push('scanner_keyword');
           break;
         }
       }
@@ -1130,8 +1139,6 @@ export class UltimateProtectorNodeAgent {
     const host = String(req.headers.host || '');
     const pathOnly = String(req.originalUrl || req.url || '/').split('?')[0] || '/';
     const currentUrl = `${proto}://${host}${pathOnly}`;
-    const baseUrl = this.apiUrl.replace(/\/?api$/i, '');
-
     const rid = `RAY-${crypto.randomBytes(6).toString('hex')}`;
     const ip = normalizeIp(req.ip || req.socket?.remoteAddress) || '0.0.0.0';
 
@@ -1142,7 +1149,18 @@ export class UltimateProtectorNodeAgent {
       }, 2000);
       const token = response?.json?.token;
       if (!res.headersSent && response?.ok && typeof token === 'string' && token.length > 20) {
-        res.redirect(302, `${baseUrl}/security-check?token=${encodeURIComponent(token)}`);
+        let challengeUrl = response?.json?.challenge_url;
+        if (typeof challengeUrl !== 'string' || !/^https?:\/\//i.test(challengeUrl)) {
+          const platformUrl = new URL(this.apiUrl);
+          if (platformUrl.hostname.toLowerCase().startsWith('api.')) {
+            platformUrl.hostname = platformUrl.hostname.slice(4);
+          }
+          platformUrl.pathname = '/security-check';
+          platformUrl.search = `?token=${encodeURIComponent(token)}`;
+          platformUrl.hash = '';
+          challengeUrl = platformUrl.toString();
+        }
+        res.redirect(302, challengeUrl);
         return;
       }
     } catch {
@@ -1176,6 +1194,22 @@ export class UltimateProtectorNodeAgent {
 
     const rid = `RAY-${crypto.randomBytes(6).toString('hex')}`;
     res.status(403).type('text/html').send(this.#blockHtml(ip, reason, rid));
+  }
+
+  #respondGeoBlock(req, res) {
+    const escape = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;',
+    })[character]);
+    const reference = `RL-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+    const host = escape(req.headers.host || 'this service');
+    const path = escape(req.originalUrl || req.url || '/');
+
+    res
+      .status(403)
+      .set('Cache-Control', 'no-store, private')
+      .set('X-Robots-Tag', 'noindex, nofollow, noarchive')
+      .type('text/html')
+      .send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>Access unavailable</title><style>*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#f7f7f5;color:#151515}body{font-family:Arial,Helvetica,sans-serif;border-top:3px solid #f0b90b}.wrap{width:min(920px,calc(100% - 48px));margin:0 auto;padding:64px 0 80px}.brand{display:flex;align-items:center;gap:10px;margin-bottom:72px;font-size:12px;font-weight:800;letter-spacing:.14em}.mark{display:grid;place-items:center;width:26px;height:26px;background:#f0b90b;color:#151515;font-size:13px;font-weight:900}.eyebrow{margin:0 0 18px;color:#777;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{max-width:680px;margin:0;font-size:clamp(38px,6vw,68px);line-height:1.02;letter-spacing:-.045em;font-weight:700}.lead{max-width:620px;margin:28px 0 0;color:#555;font-size:16px;line-height:1.7}.details{max-width:720px;margin-top:56px;padding-top:20px;border-top:1px solid #d8d8d3;font-family:SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px;line-height:1.8;color:#676767}.row{display:grid;grid-template-columns:100px minmax(0,1fr);gap:16px}.value{color:#202020;overflow-wrap:anywhere}.foot{margin-top:64px;color:#8a8a86;font-size:12px;line-height:1.6}.foot strong{color:#3a3a38}@media(max-width:600px){.wrap{width:min(100% - 32px,920px);padding-top:38px}.brand{margin-bottom:52px}.details{margin-top:42px}.row{grid-template-columns:1fr;gap:2px;margin-bottom:10px}}</style></head><body><main class="wrap"><div class="brand"><span class="mark">R</span><span>RELINTIO</span></div><p class="eyebrow">Regional access policy</p><h1>Access is unavailable from your region.</h1><p class="lead">The owner of this service has limited where it can be accessed. Your request was not classified as malicious, and no permanent block was created.</p><div class="details"><div class="row"><span>Service</span><span class="value">${host}</span></div><div class="row"><span>Request</span><span class="value">${path}</span></div><div class="row"><span>Reference</span><span class="value">${reference}</span></div></div><p class="foot">If you believe this restriction is unintended, contact the service owner and include the reference above.<br><strong>Policy enforcement by Relintio.</strong></p></main></body></html>`);
   }
 
   #detectClientIp(req, rules, remote) {

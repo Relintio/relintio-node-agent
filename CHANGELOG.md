@@ -18,7 +18,7 @@ All notable changes to `@relintio/agent` will be documented in this file.
 - **CVE-2026-4926** — Added advisory for `path-to-regexp` ReDoS vulnerability (CVSS 7.5). Users in Express middleware mode should update to `express` ≥ 4.21.2. The bundled `express-demo` example now pins `^4.21.2`.
 
 ### Fixed
-- Corrected API URL in docs from `https://app.relintio.com/api` to `https://relintio.com/api` — the `app.` subdomain does not exist.
+- Migrated the canonical API URL to `https://api.relintio.com/v1`; `https://relintio.com/api` remains a compatibility endpoint for older deployments.
 
 ## [0.6.0] — 2026-05-05
 
@@ -44,7 +44,7 @@ All notable changes to `@relintio/agent` will be documented in this file.
 ## [0.3.0] — 2026-05-04
 
 ### Changed
-- **Geo enrichment architecture hardened** — The server-side `/api/agent/geo-lookup` endpoint now performs local MaxMind GeoLite2 lookups instead of proxying to `ipinfo.io`. Agent behaviour is unchanged; the improvement is server-side.
+- **Geo enrichment architecture hardened** — The canonical `/v1/agent/geo-lookup` endpoint now performs local MaxMind GeoLite2 lookups instead of proxying to `ipinfo.io`. Agent behaviour is unchanged; the improvement is server-side.
 - Bumped `AGENT_VERSION` to `0.3.0`.
 
 ## [0.2.2] — 2026-04-23
